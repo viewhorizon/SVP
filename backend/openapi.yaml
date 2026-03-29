@@ -1,0 +1,723 @@
+openapi: 3.0.3
+info:
+  title: SPV API
+  version: 1.0.0
+  description: API para votos, puntos y analisis de planificacion.
+servers:
+  - url: http://localhost:8787
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        '200':
+          description: Servicio activo
+  /api/votes:
+    post:
+      summary: Registrar voto y acreditar puntos
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activityId]
+              properties:
+                activityId:
+                  type: string
+                activityScope:
+                  type: string
+                  default: local
+                requestId:
+                  type: string
+                eventId:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Voto procesado
+        '429':
+          description: Limite de votos o rate limit excedido
+  /api/votes/count:
+    get:
+      summary: Contar votos del dia
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: activityId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conteo de votos
+  /api/votes/limits:
+    get:
+      summary: Consultar limites diarios de votos
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Limites de usuario
+  /api/points/balance:
+    get:
+      summary: Balance del usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Balance disponible e historico
+  /api/points/balance/{userId}:
+    get:
+      summary: Balance por userId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Balance del usuario
+  /api/points/credit:
+    post:
+      summary: Acreditar puntos
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Credito aplicado
+  /api/points/debit:
+    post:
+      summary: Debitar puntos
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Debito aplicado
+        '409':
+          description: Saldo insuficiente
+  /api/points/transfer:
+    post:
+      summary: Transferir puntos entre usuarios
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Transferencia aplicada
+        '409':
+          description: Saldo insuficiente
+  /api/points/convert:
+    post:
+      summary: Convertir puntos a item externo
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Conversion iniciada
+  /api/points/liveops/convert:
+    post:
+      summary: Conversion bidireccional entre SPV y LiveOps
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parkId, amount, direction]
+              properties:
+                parkId:
+                  type: string
+                amount:
+                  type: number
+                direction:
+                  type: string
+                  enum: [POINTS_TO_LIVEOPS, LIVEOPS_TO_POINTS]
+                rateId:
+                  type: string
+      responses:
+        '201':
+          description: Conversion registrada
+        '409':
+          description: Saldo insuficiente
+  /api/inventory/catalog:
+    get:
+      summary: Catalogo de tienda (global/local)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [global, local]
+        - in: query
+          name: parkId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Items del catalogo
+  /api/inventory/me:
+    get:
+      summary: Inventario del usuario autenticado
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [global, local]
+        - in: query
+          name: parkId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Items del usuario
+  /api/inventory/purchase:
+    post:
+      summary: Compra item de tienda con SPV
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId]
+              properties:
+                itemId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                parkId:
+                  type: string
+                requestId:
+                  type: string
+      responses:
+        '201':
+          description: Compra aplicada
+        '409':
+          description: Saldo o stock insuficiente
+  /api/inventory/lifecycle/transfer:
+    post:
+      summary: Transferir item entre inventarios de usuarios
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId, toUserId]
+              properties:
+                itemId:
+                  type: string
+                  format: uuid
+                toUserId:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                parkId:
+                  type: string
+                transferPoints:
+                  type: boolean
+                  default: true
+                pointsValuePerItem:
+                  type: integer
+                  minimum: 0
+                requestId:
+                  type: string
+      responses:
+        '201':
+          description: Transferencia aplicada
+        '409':
+          description: Cantidad o saldo insuficiente
+  /api/inventory/lifecycle/destroy:
+    post:
+      summary: Destruir item y acreditar puntos equivalentes
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemId]
+              properties:
+                itemId:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                parkId:
+                  type: string
+                pointsValuePerItem:
+                  type: integer
+                  minimum: 0
+                requestId:
+                  type: string
+      responses:
+        '201':
+          description: Destruccion aplicada
+        '409':
+          description: Cantidad insuficiente
+  /api/inventory/lifecycle/transform:
+    post:
+      summary: Transformar item origen en item destino y ajustar puntos por valorizacion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromItemId, toItemId]
+              properties:
+                fromItemId:
+                  type: string
+                  format: uuid
+                toItemId:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                parkId:
+                  type: string
+                pointsDelta:
+                  type: integer
+                  description: Delta manual. Si no se envia, se calcula por diferencia de valor en catalogo.
+                requestId:
+                  type: string
+      responses:
+        '201':
+          description: Transformacion aplicada
+        '409':
+          description: Cantidad o saldo insuficiente
+  /api/webhooks/points/credit:
+    post:
+      summary: Webhook de acreditacion de puntos externos
+      parameters:
+        - in: header
+          name: x-webhook-secret
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: x-webhook-timestamp
+          required: false
+          schema:
+            type: string
+          description: Timestamp unix (segundos) requerido cuando se usa HMAC.
+        - in: header
+          name: x-webhook-signature
+          required: false
+          schema:
+            type: string
+          description: Firma `sha256=<hex>` o `<hex>` para validar payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, amount]
+              properties:
+                userId:
+                  type: string
+                amount:
+                  type: number
+                sourceSystem:
+                  type: string
+                requestId:
+                  type: string
+                eventId:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Credito externo aplicado
+        '401':
+          description: Secret o firma invalida
+        '409':
+          description: Webhook replay detectado
+  /api/ai/planning/analyze:
+    post:
+      summary: Generar analisis SMART/FODA para tareas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tasks:
+                  type: array
+                  items:
+                    type: object
+                document:
+                  type: string
+                  description: Texto de preproduccion o planificacion para convertir a backlog/sprintlog
+      responses:
+        '200':
+          description: Analisis generado
+  /api/identity/link:
+    post:
+      summary: Vincular usuario externo de una app con usuario interno SVP
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceApp, externalUserId]
+              properties:
+                sourceApp:
+                  type: string
+                externalUserId:
+                  type: string
+                svpUserId:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Vinculacion creada o actualizada
+    get:
+      summary: Resolver vinculacion externa a SVP
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: sourceApp
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: externalUserId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vinculacion encontrada
+        '404':
+          description: Vinculacion no encontrada
+  /api/events/validate:
+    post:
+      summary: Validar payload de resultados externos sin aplicar puntos
+      parameters:
+        - in: header
+          name: x-webhook-secret
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, sourceApp, activityType, activityId, unit]
+              properties:
+                eventId:
+                  type: string
+                sourceApp:
+                  type: string
+                sourceEnv:
+                  type: string
+                svpUserId:
+                  type: string
+                externalUserId:
+                  type: string
+                activityType:
+                  type: string
+                activityId:
+                  type: string
+                score:
+                  type: number
+                  description: Puntaje de logro opcional (achievement score).
+                activityHours:
+                  type: number
+                  description: Horas de actividad para formula SPV principal (hours * votes).
+                totalVotes:
+                  type: integer
+                localVotes:
+                  type: integer
+                globalVotes:
+                  type: integer
+                unit:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Payload validado y proyeccion de puntos
+  /api/events/results:
+    post:
+      summary: Ingesta de resultados externos y acreditacion de puntos SVP
+      parameters:
+        - in: header
+          name: x-webhook-secret
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, sourceApp, activityType, activityId, unit]
+              properties:
+                eventId:
+                  type: string
+                sourceApp:
+                  type: string
+                sourceEnv:
+                  type: string
+                svpUserId:
+                  type: string
+                externalUserId:
+                  type: string
+                activityType:
+                  type: string
+                activityId:
+                  type: string
+                score:
+                  type: number
+                  description: Puntaje de logro opcional (achievement score).
+                activityHours:
+                  type: number
+                  description: Horas de actividad para formula SPV principal (hours * votes).
+                totalVotes:
+                  type: integer
+                localVotes:
+                  type: integer
+                globalVotes:
+                  type: integer
+                unit:
+                  type: string
+                requestId:
+                  type: string
+                occurredAt:
+                  type: string
+                  format: date-time
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Resultado procesado y puntos acreditados
+        '200':
+          description: Reintento idempotente
+        '404':
+          description: No se pudo resolver el usuario SVP
+  /api/achievements:
+    get:
+      summary: Listar logros votables por actividad
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: activityId
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, voting, approved, rejected, archived]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Logros y conteo de votos
+    post:
+      summary: Crear propuesta de logro votable
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activityId, title]
+              properties:
+                activityId:
+                  type: string
+                title:
+                  type: string
+                description:
+                  type: string
+                rewardType:
+                  type: string
+                  enum: [points, item, mixed]
+                rewardPoints:
+                  type: integer
+                rewardItemId:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Logro creado en estado voting
+  /api/achievements/{achievementId}/vote:
+    post:
+      summary: Votar un logro (up/down)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: achievementId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vote]
+              properties:
+                vote:
+                  type: string
+                  enum: [up, down]
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Voto registrado o actualizado
+        '404':
+          description: Logro no encontrado
+        '409':
+          description: Logro no esta en estado voting
+  /api/achievements/{achievementId}/close:
+    post:
+      summary: Cerrar votacion de logro (approved/rejected/archived)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: achievementId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected, archived]
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Logro cerrado
+        '404':
+          description: Logro no encontrado
+        '409':
+          description: Logro ya cerrado o usuario no autorizado
+  /api/monitor/transactions:
+    get:
+      summary: Consultar transacciones cross-system del SVP
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: transactionType
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Lista de transacciones
+  /api/monitor/transactions/stream:
+    get:
+      summary: Stream SSE de transacciones cross-system del SVP
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: transactionType
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: intervalMs
+          schema:
+            type: integer
+            minimum: 1000
+            maximum: 30000
+      responses:
+        '200':
+          description: Stream text/event-stream
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

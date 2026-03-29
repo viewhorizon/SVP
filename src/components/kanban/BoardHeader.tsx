@@ -1,9 +1,9 @@
-import { Download, Upload, Plus, Activity } from 'lucide-react';
-import { Task } from '../../services/kanbanService';
+import { Activity, Download, Plus, Upload } from "lucide-react";
+import { Task } from "../../services/kanbanService";
 
 interface BoardHeaderProps {
-  activeTab: 'board' | 'metrics';
-  setActiveTab: (tab: 'board' | 'metrics') => void;
+  activeTab: "board" | "metrics";
+  setActiveTab: (tab: "board" | "metrics") => void;
   onOpenCreateModal: () => void;
   onOpenImportModal: () => void;
   onExportTrello: () => void;
@@ -20,34 +20,25 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
   onExportJson,
   tasks,
 }) => {
-  const calculateMetrics = () => {
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.status === 'done').length;
-    const inProgress = tasks.filter(t => t.status === 'in-progress').length;
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, inProgress, progress };
-  };
-
-  const metrics = calculateMetrics();
+  const total = tasks.length;
+  const completed = tasks.filter((task) => task.status === "done").length;
+  const inProgress = tasks.filter((task) => task.status === "in-progress").length;
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
     <header className="mb-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tablero Kanban · General</h1>
-          <p className="text-sm text-slate-600">
-            Gestión de tareas del proyecto con importación/exportación y análisis IA
-          </p>
+          <p className="text-sm text-slate-600">Gestion de tareas del proyecto con importacion/exportacion y analisis IA</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setActiveTab('board')}
+            onClick={() => setActiveTab("board")}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
-              activeTab === 'board'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              activeTab === "board" ? "bg-blue-600 text-white shadow-md" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
             <span className="flex items-center gap-2">
@@ -57,34 +48,32 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('metrics')}
+            onClick={() => setActiveTab("metrics")}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
-              activeTab === 'metrics'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              activeTab === "metrics" ? "bg-blue-600 text-white shadow-md" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
             <span className="flex items-center gap-2">
               <Activity size={16} />
-              Métricas
+              Metricas
             </span>
           </button>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 p-4 border border-slate-200">
+      <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center gap-6">
           <div>
-            <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">Total tareas</span>
-            <p className="text-xl font-bold text-slate-900">{metrics.total}</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Total tareas</span>
+            <p className="text-xl font-bold text-slate-900">{total}</p>
           </div>
           <div>
-            <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">Progreso</span>
-            <p className="text-xl font-bold text-slate-900">{metrics.progress}%</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Progreso</span>
+            <p className="text-xl font-bold text-slate-900">{progress}%</p>
           </div>
           <div>
-            <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">En curso</span>
-            <p className="text-xl font-bold text-slate-900">{metrics.inProgress}</p>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">En curso</span>
+            <p className="text-xl font-bold text-slate-900">{inProgress}</p>
           </div>
         </div>
 

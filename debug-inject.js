@@ -57,7 +57,6 @@
     // Check 5: React版本检测
     checkReact: () => {
       debug.log('React Check');
-      const reactRoot = document.querySelector('[data-reactroot]');
       const root = document.getElementById('root');
       
       if (!root) {

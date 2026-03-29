@@ -6,5 +6,7 @@ declare module 'express-serve-static-core' {
       uid: string;
       email?: string;
     };
+    rawBody?: Buffer;
+    requestId?: string;
   }
 }

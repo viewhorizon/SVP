@@ -1,39 +1,52 @@
-import { TaskStatus, Task } from '../../services/kanbanService';
-import { TaskCard } from './TaskCard';
+import { priorityStyles, Task, TaskStatus } from "../../services/kanbanService";
 
 interface KanbanColumnProps {
   column: { id: TaskStatus; label: string; color: string };
-  filteredTasks: Task[];
-  onTaskClick: (task: Task) => void;
+  tasks: Task[];
+  onMoveTask: (taskId: string, status: TaskStatus) => void;
+  onSelectTask: (task: Task) => void;
 }
 
-export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, filteredTasks, onTaskClick }) => {
-  return (
-    <div className="flex-shrink-0 w-full md:w-[calc(50%-0.5rem)] xl:w-[calc(33.333%-0.67rem)] 2xl:w-[calc(20%-0.8rem)]">
-      <div
-        className={`rounded-xl border-2 border-slate-200 bg-gradient-to-br ${column.color} p-4 shadow-lg min-h-[260px] md:min-h-[380px]`}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white drop-shadow-sm">{column.label}</h3>
-          <span className="rounded-full bg-white/30 px-3 py-1 text-sm font-semibold text-white backdrop-blur-sm">
-            {filteredTasks.length}
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {filteredTasks.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
-          ))}
-          
-          {filteredTasks.length === 0 && (
-            <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50/50 py-8">
-              <p className="text-sm text-slate-500">
-                No hay tareas en {column.label}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+const columnSurface: Record<TaskStatus, string> = {
+  backlog: "bg-slate-50 border-slate-200",
+  todo: "bg-rose-50 border-rose-200",
+  "in-progress": "bg-amber-50 border-amber-200",
+  review: "bg-violet-50 border-violet-200",
+  done: "bg-emerald-50 border-emerald-200",
 };
+
+export function KanbanColumn({ column, tasks, onMoveTask, onSelectTask }: KanbanColumnProps) {
+  return (
+    <section className={`kanban-fade-in flex h-[70vh] min-h-[460px] min-w-[270px] flex-1 flex-col rounded-xl border p-3 max-h-[760px] ${columnSurface[column.id]}`}>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">{column.label} ({tasks.length})</h3>
+      <div className="hide-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
+        {tasks.map((task) => (
+          <article key={task.id} className="kanban-task rounded-lg border border-slate-200 bg-white p-2">
+            <div className="mb-1 flex items-start justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectTask(task)}
+                className="text-left text-sm font-semibold text-slate-900 underline-offset-2 hover:underline"
+              >
+                {task.title}
+              </button>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityStyles[task.priority]}`}>{task.priority}</span>
+            </div>
+            <p className="text-xs text-slate-600">{task.category} · {task.estimated}</p>
+            <select
+              value={task.status}
+              onChange={(event) => onMoveTask(task.id, event.target.value as TaskStatus)}
+              className="mt-2 w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+            >
+              <option value="backlog">Backlog</option>
+              <option value="todo">Por Hacer / Pendiente</option>
+              <option value="in-progress">En Proceso</option>
+              <option value="review">Revision</option>
+              <option value="done">Completado</option>
+            </select>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}

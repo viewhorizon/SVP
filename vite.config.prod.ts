@@ -7,8 +7,8 @@ import { defineConfig } from "vite";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuración de producción SIN vite-plugin-singlefile
-// Usa Esta configuración para entornos con CSP estricto que bloquean scripts inline
+// Configuracion de produccion SIN vite-plugin-singlefile
+// Usa esta configuracion para entornos con CSP estricto que bloquean scripts inline
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {

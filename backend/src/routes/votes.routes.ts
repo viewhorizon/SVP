@@ -4,25 +4,44 @@ import type { Pool } from 'pg';
 import { withTransaction } from '../db/withTransaction';
 import { appendLedgerEntry, getBalance } from '../db/pointsRepository';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/requireAuth';
+import { votesRateLimit } from '../middleware/votesRateLimit';
+import { validateBody, validateQuery } from '../middleware/validate';
+import { votesCountQuerySchema, votesCreateSchema } from '../validation/schemas';
+import {
+  buildVotesCountCacheKey,
+  buildVotesLimitsCacheKey,
+  getCached,
+  invalidateVotesCacheForUser,
+  setCached,
+} from '../services/votesCache';
 
 type CreateVotesRouterOptions = {
   pool: Pool;
 };
 
+const readIdempotencyKey = (headers: { [key: string]: unknown }) => {
+  const raw = headers['idempotency-key'] ?? headers['x-idempotency-key'];
+  const value = String(raw ?? '').trim();
+  return value.length > 0 ? value : null;
+};
+
 export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
   const router = Router();
 
-  router.post('/votes', requireAuth, async (req: AuthenticatedRequest, res) => {
+  router.post('/votes', requireAuth, votesRateLimit, validateBody(votesCreateSchema), async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.uid;
-    const activityId = String(req.body?.activityId ?? '').trim();
-    const activityScope = String(req.body?.activityScope ?? 'local').trim();
-    const requestId = String(req.body?.requestId ?? randomUUID());
-    const eventId = String(req.body?.eventId ?? randomUUID());
-    const metadata = req.body?.metadata ?? {};
-
-    if (!activityId) {
-      return res.status(400).json({ error: 'activityId es requerido' });
-    }
+    const body = res.locals.validatedBody as {
+      activityId: string;
+      activityScope?: 'local' | 'global';
+      requestId?: string;
+      eventId?: string;
+      metadata?: Record<string, unknown>;
+    };
+    const activityId = body.activityId;
+    const activityScope = body.activityScope ?? 'local';
+    const requestId = body.requestId ?? readIdempotencyKey(req.headers) ?? randomUUID();
+    const eventId = body.eventId ?? randomUUID();
+    const metadata = body.metadata ?? {};
 
     try {
       const payload = await withTransaction(pool, async (client) => {
@@ -149,16 +168,27 @@ export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
         return res.status(429).json({ error: payload.reason, limits: payload.limits });
       }
 
-      return res.status(201).json(payload);
+      if (!payload.idempotent) {
+        invalidateVotesCacheForUser(userId);
+      }
+
+      return res.status(payload.idempotent ? 200 : 201).json(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error interno al votar';
       return res.status(500).json({ error: message });
     }
   });
 
-  router.get('/votes/count', requireAuth, async (req: AuthenticatedRequest, res) => {
+  router.get('/votes/count', requireAuth, validateQuery(votesCountQuerySchema), async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.uid;
-    const activityId = req.query.activityId ? String(req.query.activityId) : null;
+    const query = res.locals.validatedQuery as { activityId?: string };
+    const activityId = query.activityId ? String(query.activityId) : null;
+    const cacheKey = buildVotesCountCacheKey(userId, activityId);
+
+    const cached = getCached<{ userId: string; activityId: string | null; votesToday: number }>(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
+    }
 
     try {
       const result = await pool.query(
@@ -171,11 +201,14 @@ export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
         [userId, activityId]
       );
 
-      return res.json({
+      const payload = {
         userId,
         activityId,
         votesToday: Number(result.rows[0]?.total ?? 0),
-      });
+      };
+
+      setCached(cacheKey, payload);
+      return res.json({ ...payload, cached: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error consultando votos';
       return res.status(500).json({ error: message });
@@ -184,6 +217,12 @@ export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
 
   router.get('/votes/limits', requireAuth, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.uid;
+    const cacheKey = buildVotesLimitsCacheKey(userId);
+
+    const cached = getCached<{ userId: string; dailyLimit: number; usedVotes: number; remainingVotes: number }>(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
+    }
 
     try {
       const [limitResult, usedVotesResult] = await Promise.all([
@@ -212,12 +251,15 @@ export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
       const dailyLimit = Number(limitResult.rows[0]?.max_value ?? 5);
       const usedVotes = Number(usedVotesResult.rows[0]?.used ?? 0);
 
-      return res.json({
+      const payload = {
         userId,
         dailyLimit,
         usedVotes,
         remainingVotes: Math.max(dailyLimit - usedVotes, 0),
-      });
+      };
+
+      setCached(cacheKey, payload);
+      return res.json({ ...payload, cached: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error consultando límites';
       return res.status(500).json({ error: message });

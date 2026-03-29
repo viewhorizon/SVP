@@ -1,661 +1,580 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, X, FileText, Zap, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AI_ANALYZER_ENDPOINT,
-  COLUMNS,
-  DEFAULT_TASKS,
-  STATUS_FILTER_BUTTONS,
-  buildFodaCoverageCounters,
+  buildAsanaCsv,
+  buildJiraCsv,
   buildKanbanExportJson,
   buildPlanningAnalysis,
   buildTrelloCsv,
+  COLUMNS,
   createTask,
+  convertRequirementsTextToTasks,
+  getTaskRoadmapPage,
   mapTaskLikeArray,
   mergePlanningAnalysis,
-  normalizeStatus,
   parseImportContent,
+  parseEstimatedHours,
   persistTasks,
-  priorityStyles,
+  ROADMAP_PAGES,
+  ROADMAP_WEEKLY_TARGET_HOURS,
+  type RoadmapPageId,
+  requestPlanningAnalysis,
   safeReadTasks,
-  type PlanningAnalysis,
+  type FodaMetrics,
+  type SmartMetrics,
   type Task,
   type TaskPriority,
   type TaskStatus,
-  type TaskLike,
-} from './services/kanbanService';
-import { BoardHeader } from './components/kanban/BoardHeader';
-import { FiltersBar } from './components/kanban/FiltersBar';
-import { KanbanColumn } from './components/kanban/KanbanColumn';
-import { TaskCard } from './components/kanban/TaskCard';
+} from "./services/kanbanService";
+import { useKanbanFilters } from "./hooks/useKanbanFilters";
+import { KanbanHeader } from "./components/kanban/KanbanHeader";
+import { KanbanActionsBar } from "./components/kanban/KanbanActionsBar";
+import { KanbanFilters } from "./components/kanban/KanbanFilters";
+import { KanbanMetricsPanel } from "./components/kanban/KanbanMetricsPanel";
+import { KanbanColumn } from "./components/kanban/KanbanColumn";
+import { CreateTaskModal } from "./components/kanban/CreateTaskModal";
+import { TaskDetailsModal } from "./components/kanban/TaskDetailsModal";
+import { KanbanTaskTable } from "./components/kanban/KanbanTaskTable";
+import { RoadmapSprintBar } from "./components/kanban/RoadmapSprintBar";
+import type { TraceabilityEntry } from "./components/kanban/TraceabilityPanel";
 
-const downloadFile = (content: BlobPart, mimeType: string, filename: string) => {
-  const blob = new Blob([content], { type: mimeType });
+type RemotePlanningMetrics = {
+  smart?: Partial<SmartMetrics>;
+  foda?: Partial<FodaMetrics>;
+  summary?: string;
+  suggestions?: string[];
+};
+
+type ImportPreview = {
+  source: "structured" | "analysis";
+  tasks: Task[];
+  summary: string;
+};
+
+const downloadFile = (content: string, mime: string, name: string) => {
+  const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
+  const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = name;
+  document.body.appendChild(anchor);
   anchor.click();
+  anchor.remove();
   URL.revokeObjectURL(url);
 };
 
-const KanbanBoard: React.FC = () => {
+const TIMER_STORAGE_KEY = "kanban.project.timer.by-sprint.v1";
+const TRACE_STORAGE_KEY = "kanban.trace.entries.v1";
+const TRACE_LIMIT = 25;
+
+type TimerSnapshot = {
+  elapsedMs: number;
+  isRunning: boolean;
+  startedAt: number | null;
+};
+
+type TimerByRoadmap = Record<RoadmapPageId, TimerSnapshot>;
+
+const createDefaultTimerByRoadmap = (): TimerByRoadmap => ({
+  ...Object.fromEntries(ROADMAP_PAGES.map((page) => [page.id, { elapsedMs: 0, isRunning: false, startedAt: null }])) as TimerByRoadmap,
+});
+
+const readTimerByRoadmap = (): TimerByRoadmap => {
+  try {
+    const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+    if (!raw) return createDefaultTimerByRoadmap();
+    const parsed = JSON.parse(raw) as Partial<TimerByRoadmap>;
+    const fallback = createDefaultTimerByRoadmap();
+    const normalize = (entry?: Partial<TimerSnapshot>): TimerSnapshot => ({
+      elapsedMs: Number.isFinite(entry?.elapsedMs) ? Number(entry?.elapsedMs) : 0,
+      isRunning: Boolean(entry?.isRunning),
+      startedAt: typeof entry?.startedAt === "number" ? entry.startedAt : null,
+    });
+    return Object.fromEntries(ROADMAP_PAGES.map((page) => [page.id, normalize(parsed[page.id] ?? fallback[page.id])])) as TimerByRoadmap;
+  } catch {
+    return createDefaultTimerByRoadmap();
+  }
+};
+
+const safeReadTraceEntries = (): TraceabilityEntry[] => {
+  try {
+    const raw = localStorage.getItem(TRACE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TraceabilityEntry[];
+    return Array.isArray(parsed) ? parsed.slice(0, TRACE_LIMIT) : [];
+  } catch {
+    return [];
+  }
+};
+
+const createTraceId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `trace-${Date.now()}`);
+
+export default function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>(safeReadTasks);
-  const [activeTab, setActiveTab] = useState<'board' | 'metrics'>('board');
-  const [filter, setFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
+  const [roadmapPage, setRoadmapPage] = useState<RoadmapPageId>("foundation");
+  const [view, setView] = useState<"board" | "metrics">("board");
+  const [boardDisplay, setBoardDisplay] = useState<"kanban" | "table">("kanban");
+  const [slideMode, setSlideMode] = useState(true);
+  const [message, setMessage] = useState("");
+  const [remoteMetrics, setRemoteMetrics] = useState<RemotePlanningMetrics | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [horizontalMobileMode, setHorizontalMobileMode] = useState(false);
-  const [isCompactViewport, setIsCompactViewport] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [message, setMessage] = useState('');
-  const [analysis, setAnalysis] = useState<PlanningAnalysis>(() => buildPlanningAnalysis(safeReadTasks()));
+  const [timersByRoadmap, setTimersByRoadmap] = useState<TimerByRoadmap>(readTimerByRoadmap);
+  const [traceEntries, setTraceEntries] = useState<TraceabilityEntry[]>(safeReadTraceEntries);
   const importRef = useRef<HTMLInputElement | null>(null);
-  const aiImportRef = useRef<HTMLInputElement | null>(null);
-
-  const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    category: 'general',
-    priority: 'medium' as TaskPriority,
-    estimated: '1h',
-    status: 'backlog' as TaskStatus,
-  });
+  const analyzeRef = useRef<HTMLInputElement | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const pageTasks = useMemo(() => tasks.filter((task) => getTaskRoadmapPage(task) === roadmapPage), [tasks, roadmapPage]);
+  const { categoryFilter, setCategoryFilter, statusFilters, toggleStatusFilter, isStatusVisible, categories, filteredTasks, statusButtons, statusCounters } = useKanbanFilters(pageTasks);
 
   useEffect(() => {
-    persistTasks(tasks);
-
-    setAnalysis(buildPlanningAnalysis(tasks));
-  }, [tasks]);
-
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 1023px)');
-    const syncViewport = (query: MediaQueryList | MediaQueryListEvent) => {
-      setIsCompactViewport(query.matches);
-    };
-
-    syncViewport(media);
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', syncViewport);
-      return () => media.removeEventListener('change', syncViewport);
-    }
-
-    media.addListener(syncViewport);
-    return () => media.removeListener(syncViewport);
+    const interval = window.setInterval(() => {
+      setTimersByRoadmap((current) => {
+        const now = Date.now();
+        let changed = false;
+        const next = { ...current };
+        (Object.keys(current) as RoadmapPageId[]).forEach((pageId) => {
+          const snapshot = current[pageId];
+          if (!snapshot.isRunning || !snapshot.startedAt) return;
+          next[pageId] = { ...snapshot, elapsedMs: now - snapshot.startedAt };
+          changed = true;
+        });
+        return changed ? next : current;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
   }, []);
 
-  const categories = useMemo(
-    () => ['all', ...new Set(tasks.map((task) => task.category).sort((a, b) => a.localeCompare(b)))],
-    [tasks],
-  );
+  useEffect(() => {
+    localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(timersByRoadmap));
+  }, [timersByRoadmap]);
 
-  const filteredTasks = useMemo(
-    () =>
-      tasks.filter(
-        (task) => (filter === 'all' || task.category === filter) && (statusFilter === 'all' || task.status === statusFilter),
-      ),
-    [tasks, filter, statusFilter],
-  );
+  useEffect(() => {
+    localStorage.setItem(TRACE_STORAGE_KEY, JSON.stringify(traceEntries));
+  }, [traceEntries]);
 
-  const taskCountByStatus = useMemo(
-    () =>
-      COLUMNS.reduce<Record<TaskStatus, number>>((acc, column) => {
-        acc[column.id] = filteredTasks.filter((task) => task.status === column.id).length;
-        return acc;
-      }, { backlog: 0, todo: 0, 'in-progress': 0, review: 0, done: 0 }),
-    [filteredTasks],
-  );
+  useEffect(() => {
+    const onRequest = (event: Event) => {
+      const custom = event as CustomEvent<{ requestId?: string; path?: string; status?: number; ok?: boolean }>;
+      const detail = custom.detail;
+      if (!detail?.requestId) return;
+      const entry: TraceabilityEntry = {
+        id: createTraceId(),
+        timestamp: new Date().toISOString(),
+        action: `API ${detail.path ?? "request"}`,
+        source: "api",
+        status: detail.ok ? "ok" : "error",
+        requestId: detail.requestId,
+        detail: typeof detail.status === "number" ? `HTTP ${detail.status}` : undefined,
+      };
+      setTraceEntries((current) => [entry, ...current].slice(0, TRACE_LIMIT));
+    };
 
-  const visibleColumns = useMemo(() => {
-    if (statusFilter !== 'all') {
-      return COLUMNS.filter((column) => column.id === statusFilter);
-    }
+    window.addEventListener("spv:request", onRequest as EventListener);
+    return () => window.removeEventListener("spv:request", onRequest as EventListener);
+  }, []);
 
-    // En "Todos los estados" solo se muestran contenedores con tareas visibles.
-    return COLUMNS.filter((column) => taskCountByStatus[column.id] > 0);
-  }, [statusFilter, taskCountByStatus]);
-
-  const stats = useMemo(
-    () => ({
-      total: tasks.length,
-      backlog: tasks.filter((task) => task.status === 'backlog').length,
-      todo: tasks.filter((task) => task.status === 'todo').length,
-      inProgress: tasks.filter((task) => task.status === 'in-progress').length,
-      review: tasks.filter((task) => task.status === 'review').length,
-      done: tasks.filter((task) => task.status === 'done').length,
-    }),
-    [tasks],
-  );
-
-  const fodaCoverage = useMemo(() => buildFodaCoverageCounters(tasks), [tasks]);
-
-  const moveTask = (taskId: string, newStatus: TaskStatus) => {
-    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task)));
+  const logUiTrace = (action: string, status: "ok" | "error", detail?: string, eventId?: string) => {
+    const entry: TraceabilityEntry = {
+      id: createTraceId(),
+      timestamp: new Date().toISOString(),
+      action,
+      source: "ui",
+      status,
+      eventId,
+      detail,
+    };
+    setTraceEntries((current) => [entry, ...current].slice(0, TRACE_LIMIT));
   };
 
-  const addTask = () => {
-    if (!newTask.title.trim()) {
-      setMessage('El titulo es obligatorio para crear una tarea.');
+  useEffect(() => {
+    setRemoteMetrics(null);
+  }, [roadmapPage]);
+
+  const handleBoardWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    // Horizontal scroll is opt-in with Shift to avoid hijacking normal vertical page scroll.
+    if (!slideMode || !event.shiftKey) return;
+    const container = boardScrollRef.current;
+    if (!container) return;
+    event.preventDefault();
+    container.scrollLeft += event.deltaY;
+  };
+
+  const analysis = useMemo(() => {
+    const inferred = buildPlanningAnalysis(pageTasks);
+    if (!remoteMetrics) return inferred;
+    return mergePlanningAnalysis(inferred, {
+      smart: remoteMetrics.smart,
+      foda: remoteMetrics.foda,
+      summary: remoteMetrics.summary,
+      suggestions: remoteMetrics.suggestions,
+    });
+  }, [pageTasks, remoteMetrics]);
+
+  const addTask = (newTask: Task) => {
+    const next = [createTask({ ...newTask, roadmapPage }), ...tasks];
+    setTasks(next);
+    persistTasks(next);
+    setMessage("Tarea agregada.");
+  };
+
+  const moveTask = (taskId: string, newStatus: TaskStatus) => {
+    const next = tasks.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task));
+    setTasks(next);
+    persistTasks(next);
+  };
+
+  const exportToTrelloCsv = () => downloadFile(buildTrelloCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-trello.csv`);
+  const exportToJiraCsv = () => downloadFile(buildJiraCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-jira.csv`);
+  const exportToAsanaCsv = () => downloadFile(buildAsanaCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-asana.csv`);
+  const exportJson = () => downloadFile(JSON.stringify(buildKanbanExportJson(pageTasks), null, 2), "application/json;charset=utf-8;", `kanban-${roadmapPage}.json`);
+
+  const analyzePlan = async () => {
+    const eventId = createTraceId();
+    try {
+      const payload = await requestPlanningAnalysis({ tasks: pageTasks });
+      setRemoteMetrics(payload);
+      setMessage("Analisis actualizado desde /api/ai/planning/analyze.");
+      logUiTrace("Analizar tablero", "ok", `Tareas analizadas: ${pageTasks.length}`, eventId);
+    } catch {
+      setRemoteMetrics(null);
+      setMessage("No fue posible usar el analisis remoto, se muestra analisis local.");
+      logUiTrace("Analizar tablero", "error", "Fallo analisis remoto", eventId);
+    }
+  };
+
+  const analyzeDocumentContent = async (document: string) => {
+    const eventId = createTraceId();
+    if (!document.trim()) {
+      setMessage("El documento esta vacio o no contiene texto legible.");
+      logUiTrace("Analizar documento", "error", "Documento vacio", eventId);
       return;
     }
 
-    setTasks((prev) => [createTask(newTask), ...prev]);
-    setNewTask({
-      title: '',
-      description: '',
-      category: newTask.category || 'general',
-      priority: 'medium',
-      estimated: '1h',
-      status: 'backlog',
+    try {
+      const payload = await requestPlanningAnalysis({ document });
+      setRemoteMetrics(payload);
+
+      const fromBacklog = mapTaskLikeArray(payload.backlog, "backlog");
+      const fromSprint = mapTaskLikeArray(payload.sprintlog, "todo");
+      const mergedTasks = [...fromBacklog, ...fromSprint].map((task) => createTask({ ...task, roadmapPage }));
+
+      if (mergedTasks.length > 0) {
+        setPreview({
+          source: "analysis",
+          tasks: mergedTasks,
+          summary: `La IA genero ${mergedTasks.length} tareas. Confirma para reemplazar el tablero.`,
+        });
+        setMessage("Revision previa lista para tareas generadas por IA.");
+        logUiTrace("Analizar documento", "ok", `IA genero ${mergedTasks.length} tareas`, eventId);
+      } else {
+        setMessage("La IA devolvio analisis, pero no genero tareas convertibles.");
+        logUiTrace("Analizar documento", "error", "IA sin tareas convertibles", eventId);
+      }
+    } catch {
+      const localTasks = convertRequirementsTextToTasks(document);
+      if (localTasks.length > 0) {
+        setPreview({
+          source: "analysis",
+          tasks: localTasks.map((task) => createTask({ ...task, roadmapPage })),
+          summary: `No hubo respuesta IA. Se generaron ${localTasks.length} tareas con conversion local.`,
+        });
+        setMessage("Conversion local aplicada como fallback.");
+        logUiTrace("Analizar documento", "ok", `Fallback local genero ${localTasks.length} tareas`, eventId);
+      } else {
+        setMessage("No fue posible convertir el documento con IA.");
+        logUiTrace("Analizar documento", "error", "Sin conversion IA ni fallback", eventId);
+      }
+    }
+  };
+
+  const mapSpreadsheetRowsToTasks = (rows: Record<string, unknown>[]) => {
+    const taskLikeRows: Array<Partial<Task>> = [];
+    rows.forEach((row) => {
+      const title = String(row.title ?? row.titulo ?? row.task ?? row.tarea ?? row.name ?? "").trim();
+      if (!title) return;
+      taskLikeRows.push({
+        title,
+        description: String(row.description ?? row.descripcion ?? "").trim(),
+        status: String(row.status ?? row.estado ?? "backlog") as TaskStatus,
+        category: String(row.category ?? row.categoria ?? "general"),
+        priority: String(row.priority ?? row.prioridad ?? "medium") as TaskPriority,
+        estimated: String(row.estimated ?? row.estimado ?? "1h"),
+        notes: String(row.notes ?? row.notas ?? "").trim() || undefined,
+      });
     });
-    setMessage('Tarea agregada al tablero.');
-    setIsCreateModalOpen(false);
+
+    return mapTaskLikeArray(taskLikeRows, "backlog");
   };
 
-  const exportToTrelloCsv = () => {
-    downloadFile(buildTrelloCsv(tasks), 'text/csv;charset=utf-8;', 'kanban-trello.csv');
-  };
-
-  const exportJson = () => {
-    const payload = buildKanbanExportJson(tasks);
-    downloadFile(JSON.stringify(payload, null, 2), 'application/json;charset=utf-8;', 'kanban-general.json');
-  };
-
-  const importTasks = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const importStructuredFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const eventId = createTraceId();
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const extension = (file.name.split(".").pop() ?? "txt").toLowerCase();
+
     try {
-      const content = await file.text();
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      const imported = parseImportContent(content, extension);
+      let imported: Task[] = [];
+
+      if (extension === "xlsx" || extension === "xls") {
+        const [{ read, utils }, buffer] = await Promise.all([import("xlsx"), file.arrayBuffer()]);
+        const workbook = read(buffer, { type: "array" });
+        const firstSheet = workbook.SheetNames[0];
+        if (!firstSheet) throw new Error("Hoja vacia");
+        const rows = utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" }) as Record<string, unknown>[];
+        imported = mapSpreadsheetRowsToTasks(rows);
+      } else {
+        const content = await file.text();
+        imported = parseImportContent(content, extension);
+      }
 
       if (imported.length === 0) {
-        setMessage('No se encontraron tareas validas en el archivo.');
+        setMessage("El archivo no contiene tareas validas para importar.");
+        logUiTrace("Importar archivo", "error", `Sin tareas validas (${file.name})`, eventId);
         return;
       }
 
-      setTasks(imported);
-      setFilter('all');
-      setStatusFilter('all');
-      setMessage(`Importacion completada: ${imported.length} tareas cargadas.`);
+      const pageImported = imported.map((task) => createTask({ ...task, roadmapPage }));
+
+      setPreview({
+        source: "structured",
+        tasks: pageImported,
+        summary: `Se detectaron ${pageImported.length} tareas para ${ROADMAP_PAGES.find((page) => page.id === roadmapPage)?.label}. Confirma para importar.`,
+      });
+      setMessage("Revision previa lista para importacion estructurada.");
+      logUiTrace("Importar archivo", "ok", `${file.name}: ${pageImported.length} tareas detectadas`, eventId);
     } catch {
-      setMessage('No fue posible importar el archivo. Revisa formato JSON o CSV.');
+      setMessage("No fue posible importar el archivo. Verifica formato JSON, CSV, TOON o Excel.");
+      logUiTrace("Importar archivo", "error", `Fallo parseo en ${file.name}`, eventId);
     } finally {
-      event.target.value = '';
+      event.target.value = "";
     }
   };
 
-  const analyzePlanningDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const applyPreview = () => {
+    if (!preview) return;
+
+    const otherPages = tasks.filter((task) => getTaskRoadmapPage(task) !== roadmapPage);
+    const next = [...otherPages, ...preview.tasks.map((task) => createTask({ ...task, roadmapPage }))];
+    setTasks(next);
+    persistTasks(next);
+    setMessage(
+      preview.source === "analysis"
+        ? `Conversion IA aplicada en ${ROADMAP_PAGES.find((page) => page.id === roadmapPage)?.label}: ${preview.tasks.length} tareas.`
+        : `Importacion aplicada en ${ROADMAP_PAGES.find((page) => page.id === roadmapPage)?.label}: ${preview.tasks.length} tareas.`,
+    );
+    logUiTrace("Aplicar preview", "ok", `${preview.tasks.length} tareas aplicadas`, createTraceId());
+    setPreview(null);
+  };
+
+  const discardPreview = () => {
+    setPreview(null);
+    setMessage("Importacion cancelada.");
+    logUiTrace("Aplicar preview", "error", "Operacion cancelada", createTraceId());
+  };
+
+  const previewByStatus = useMemo(() => {
+    if (!preview) return null;
+    return COLUMNS.map((column) => ({
+      id: column.id,
+      label: column.label,
+      count: preview.tasks.filter((task) => task.status === column.id).length,
+    }));
+  }, [preview]);
+
+  const roadmapCounters = useMemo(() => {
+    const base = Object.fromEntries(ROADMAP_PAGES.map((page) => [page.id, 0])) as Record<RoadmapPageId, number>;
+    tasks.forEach((task) => {
+      const page = getTaskRoadmapPage(task);
+      if (page === "custom") return;
+      base[page] += 1;
+    });
+    return base;
+  }, [tasks]);
+
+  const roadmapDoneCounters = useMemo(() => {
+    const base = Object.fromEntries(ROADMAP_PAGES.map((page) => [page.id, 0])) as Record<RoadmapPageId, number>;
+    tasks.forEach((task) => {
+      const page = getTaskRoadmapPage(task);
+      if (page === "custom" || task.status !== "done") return;
+      base[page] += 1;
+    });
+    return base;
+  }, [tasks]);
+
+  const roadmapProgress = useMemo(
+    () =>
+      ROADMAP_PAGES.map((page) => ({
+        id: page.id,
+        label: page.label,
+        done: roadmapDoneCounters[page.id] ?? 0,
+        total: roadmapCounters[page.id] ?? 0,
+      })),
+    [roadmapCounters, roadmapDoneCounters],
+  );
+
+  const baseline = useMemo(() => {
+    const totalEstimatedHours = pageTasks.reduce((sum, task) => sum + parseEstimatedHours(task.estimated), 0);
+    const doneTasks = pageTasks.filter((task) => task.status === "done");
+    const doneEstimatedHours = doneTasks.reduce((sum, task) => sum + parseEstimatedHours(task.estimated), 0);
+    return {
+      totalEstimatedHours,
+      doneEstimatedHours,
+      tasksDone: doneTasks.length,
+      tasksTotal: pageTasks.length,
+    };
+  }, [pageTasks]);
+
+  const activeTimer = timersByRoadmap[roadmapPage];
+
+  const startTimer = () => {
+    setTimersByRoadmap((current) => ({
+      ...current,
+      [roadmapPage]: {
+        elapsedMs: current[roadmapPage].elapsedMs,
+        isRunning: true,
+        startedAt: Date.now() - current[roadmapPage].elapsedMs,
+      },
+    }));
+  };
+
+  const pauseTimer = () => {
+    setTimersByRoadmap((current) => ({
+      ...current,
+      [roadmapPage]: { ...current[roadmapPage], isRunning: false, startedAt: null },
+    }));
+  };
+
+  const resetTimer = () => {
+    setTimersByRoadmap((current) => ({
+      ...current,
+      [roadmapPage]: { elapsedMs: 0, isRunning: false, startedAt: null },
+    }));
+  };
+
+  const importDocumentToAnalyze = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setIsAnalyzing(true);
     try {
       const content = await file.text();
-      const extension = file.name.split('.').pop()?.toLowerCase();
-
-      let generatedTasks: Task[] = [];
-      let nextAnalysis: PlanningAnalysis | null = null;
-
-      try {
-        const response = await fetch(AI_ANALYZER_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: file.name,
-            extension,
-            content,
-            output: 'kanban_backlog_sprintlog_metrics',
-          }),
-        });
-
-        if (!response.ok) throw new Error('Servicio de analisis IA no disponible');
-        const data = (await response.json()) as {
-          backlog?: TaskLike[];
-          sprintlog?: TaskLike[];
-          sprintLog?: TaskLike[];
-          metrics?: {
-            smart?: Partial<PlanningAnalysis['smart']>;
-            foda?: Partial<PlanningAnalysis['foda']>;
-            summary?: string;
-            suggestions?: string[];
-          };
-        };
-
-        generatedTasks = [
-          ...mapTaskLikeArray(data.backlog, 'backlog'),
-          ...mapTaskLikeArray(data.sprintlog ?? data.sprintLog, 'todo'),
-        ];
-
-        if (generatedTasks.length > 0) {
-          const inferred = buildPlanningAnalysis(generatedTasks);
-          nextAnalysis = mergePlanningAnalysis(inferred, data.metrics);
-        }
-      } catch {
-        // Fallback local: parsea el documento y construye backlog/sprintlog con reglas basicas.
-        generatedTasks = parseImportContent(content, extension);
-        if (generatedTasks.length === 0 && extension === 'json') {
-          generatedTasks = mapTaskLikeArray(JSON.parse(content), 'backlog');
-        }
-      }
-
-      if (generatedTasks.length === 0) {
-        setMessage('No se pudieron generar tareas desde el documento cargado.');
-        return;
-      }
-
-      setTasks(generatedTasks);
-      setFilter('all');
-      setStatusFilter('all');
-      setActiveTab('metrics');
-      if (nextAnalysis) setAnalysis(nextAnalysis);
-      setMessage(`Documento analizado. Se generaron ${generatedTasks.length} tareas para backlog/sprint log.`);
+      await analyzeDocumentContent(content);
     } catch {
-      setMessage('No fue posible analizar el documento. Usa TXT, MD, CSV, TOON o JSON.');
+      setMessage("No fue posible leer el archivo para analisis IA.");
     } finally {
-      setIsAnalyzing(false);
-      event.target.value = '';
+      event.target.value = "";
     }
-  };
-
-  const resetBoard = () => {
-    setTasks(DEFAULT_TASKS);
-    setFilter('all');
-    setStatusFilter('all');
-    setMessage('Tablero restaurado a plantilla base.');
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="relative md:sticky md:top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-4 space-y-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Kanban General</h1>
-              <p className="text-sm text-slate-600">Backlog y sprint log reutilizable con importacion de documentos y analisis IA.</p>
-            </div>
+    <section className="mx-auto max-w-[1440px] px-4 py-6 lg:px-6">
+      <div className="kanban-fade-in mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+        <KanbanHeader view={view} onChangeView={setView} />
+        <KanbanActionsBar
+          boardDisplay={boardDisplay}
+          slideMode={slideMode}
+          onOpenCreateModal={() => setCreateOpen(true)}
+          onToggleDisplay={() => setBoardDisplay((prev) => (prev === "kanban" ? "table" : "kanban"))}
+          onToggleSlideMode={() => setSlideMode((prev) => !prev)}
+          onImportFile={() => importRef.current?.click()}
+          onAnalyzeFile={() => analyzeRef.current?.click()}
+          onAnalyzeBoard={() => void analyzePlan()}
+          onExportCsv={exportToTrelloCsv}
+          onExportJiraCsv={exportToJiraCsv}
+          onExportAsanaCsv={exportToAsanaCsv}
+          onExportJson={exportJson}
+        />
+      </div>
 
-            <div className="flex flex-wrap gap-2 text-sm">
-              <span className="rounded-lg bg-slate-100 px-3 py-1 font-medium text-slate-700">Total: {stats.total}</span>
-              <span className="rounded-lg bg-emerald-100 px-3 py-1 font-medium text-emerald-700">Done: {stats.done}</span>
-              <span className="rounded-lg bg-amber-100 px-3 py-1 font-medium text-amber-700">In progress: {stats.inProgress}</span>
-            </div>
-          </div>
+      <input ref={importRef} type="file" accept=".json,.csv,.toon,.txt,.xlsx,.xls" onChange={(event) => void importStructuredFile(event)} className="hidden" />
+      <input ref={analyzeRef} type="file" accept=".md,.txt,.json,.csv,.toon" onChange={(event) => void importDocumentToAnalyze(event)} className="hidden" />
+      {view === "board" ? (
+        <>
+          <RoadmapSprintBar
+            pages={ROADMAP_PAGES}
+            selectedPage={roadmapPage}
+            onSelectPage={setRoadmapPage}
+            counts={roadmapCounters}
+            doneCounts={roadmapDoneCounters}
+            weeklyTargets={ROADMAP_WEEKLY_TARGET_HOURS}
+          />
 
-          <div className="inline-flex rounded-full border border-slate-300 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('board')}
-              className={`rounded-full px-4 py-1 text-sm font-semibold ${
-                activeTab === 'board' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              Tablero
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('metrics')}
-              className={`rounded-full px-4 py-1 text-sm font-semibold ${
-                activeTab === 'metrics' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              Metricas
-            </button>
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-            <button
-              type="button"
-              onClick={exportToTrelloCsv}
-              className="whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              Exportar CSV Trello
-            </button>
-            <button
-              type="button"
-              onClick={exportJson}
-              className="whitespace-nowrap rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-            >
-              Exportar JSON
-            </button>
-              <button
-              type="button"
-              onClick={() => importRef.current?.click()}
-              className="whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Importar JSON/CSV/TOON
-            </button>
-            <button
-              type="button"
-              onClick={() => aiImportRef.current?.click()}
-              disabled={isAnalyzing}
-              className="whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isAnalyzing ? 'Analizando documento...' : 'Subir documento + IA'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-            >
-              Agregar tarea
-            </button>
-            <button
-              type="button"
-              onClick={resetBoard}
-              className="whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Restaurar plantilla
-            </button>
-            <input
-              ref={importRef}
-              type="file"
-              accept=".json,.csv,.txt,.toon"
-              className="hidden"
-              onChange={importTasks}
-            />
-            <input
-              ref={aiImportRef}
-              type="file"
-              accept=".txt,.md,.json,.csv,.toon"
-              className="hidden"
-              onChange={analyzePlanningDocument}
-            />
-          </div>
-
-          {activeTab === 'board' ? (
-          <div className="grid gap-2">
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setFilter(category)}
-                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
-                    filter === category ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {category === 'all' ? 'Todas las tareas' : category}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-              {STATUS_FILTER_BUTTONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setStatusFilter(option.value)}
-                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
-                    statusFilter === option.value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            {isCompactViewport ? (
-              <label className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={horizontalMobileMode}
-                  onChange={(e) => setHorizontalMobileMode(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                Desplazamiento horizontal (movil/tablet)
-              </label>
-            ) : null}
-          </div>
-          ) : null}
-
-          {message ? <p className="text-sm text-slate-600">{message}</p> : null}
-
-          {activeTab === 'metrics' ? (
-            <>
-              <p className="text-xs text-slate-500">
-                Documento recomendado para analisis IA: objetivos del proyecto, alcance, entregables, requisitos funcionales/no funcionales,
-                riesgos, dependencias, estimaciones y fechas objetivo. Formatos sugeridos: TXT, MD, JSON, CSV o TOON.
+          {preview && previewByStatus ? (
+            <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-semibold">{preview.summary}</p>
+              <p className="mt-1 text-xs text-blue-800">
+                {previewByStatus.map((item) => `${item.label}: ${item.count}`).join(" · ")}
               </p>
-
-              <div className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-indigo-100 px-3 py-1 font-semibold text-indigo-700">SMART completado: {analysis.smart.coverage}%</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">FODA Fortalezas: {fodaCoverage.fortalezas}</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">FODA Oportunidades: {fodaCoverage.oportunidades}</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">FODA Debilidades: {fodaCoverage.debilidades}</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">FODA Amenazas: {fodaCoverage.amenazas}</span>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyPreview}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  onClick={discardPreview}
+                  className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800"
+                >
+                  Cancelar
+                </button>
               </div>
-            </>
+            </div>
           ) : null}
 
-        </div>
-      </header>
+          <KanbanFilters
+            categories={categories}
+            categoryFilter={categoryFilter}
+            statusFilters={statusFilters}
+            statusButtons={statusButtons}
+            statusCounters={statusCounters}
+            onChangeCategory={setCategoryFilter}
+            onChangeStatus={toggleStatusFilter}
+          />
 
-      <main className="mx-auto max-w-7xl px-4 pb-6 pt-3 md:pt-6">
-        {activeTab === 'board' ? (
-          <div
-            className={
-              isCompactViewport && horizontalMobileMode
-                ? 'flex gap-4 overflow-x-auto pb-4 hide-scrollbar'
-                : 'grid grid-cols-1 gap-4 pb-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5'
-            }
-          >
-            {visibleColumns.map((column) => (
-              <section
-                key={column.id}
-                className={
-                  isCompactViewport && horizontalMobileMode
-                    ? 'w-full min-w-[85%] snap-start sm:min-w-[70%] md:min-w-[48%]'
-                    : 'w-full'
-                }
-              >
-                <div className={`rounded-t-xl bg-gradient-to-r ${column.color} px-3 py-2 text-white`}>
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold">{column.label}</h2>
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                      {taskCountByStatus[column.id]}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="min-h-[260px] space-y-3 rounded-b-xl border border-slate-200 bg-white p-3 md:min-h-[380px]">
-                  {filteredTasks
-                    .filter((task) => task.status === column.id)
-                    .map((task) => (
-                      <button
-                        type="button"
-                        key={task.id}
-                        onClick={() => setSelectedTask(task)}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-left transition hover:shadow"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                            {task.category}
-                          </span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${priorityStyles[task.priority]}`}>
-                            {task.priority}
-                          </span>
-                        </div>
-                        <p className="font-semibold text-slate-800">{task.title}</p>
-                        <p className="mt-1 text-sm text-slate-600">{task.description}</p>
-                      </button>
-                    ))}
-                </div>
-              </section>
-            ))}
-
-            {visibleColumns.length === 0 ? (
-              <section className="w-full rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-                No hay tareas visibles con los filtros actuales.
-              </section>
-            ) : null}
-          </div>
-        ) : (
-          <section className="grid gap-4 md:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-lg font-semibold text-slate-900">Analisis SMART</h3>
-              <p className="mt-1 text-sm text-slate-600">{analysis.summary}</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <p>Specific: {analysis.smart.specific}%</p>
-                <p>Measurable: {analysis.smart.measurable}%</p>
-                <p>Achievable: {analysis.smart.achievable}%</p>
-                <p>Relevant: {analysis.smart.relevant}%</p>
-                <p>Time-bound: {analysis.smart.timeBound}%</p>
-                <p className="font-semibold text-indigo-700">Cobertura total: {analysis.smart.coverage}%</p>
-              </div>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-lg font-semibold text-slate-900">Matriz FODA</h3>
-              <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-                <div className="rounded-lg bg-emerald-50 p-3">
-                  <p className="font-semibold text-emerald-800">Fortalezas</p>
-                  <p className="mt-1 text-slate-700">{analysis.foda.fortalezas.slice(0, 3).join(' | ') || 'Sin datos'}</p>
-                </div>
-                <div className="rounded-lg bg-blue-50 p-3">
-                  <p className="font-semibold text-blue-800">Oportunidades</p>
-                  <p className="mt-1 text-slate-700">{analysis.foda.oportunidades.slice(0, 3).join(' | ') || 'Sin datos'}</p>
-                </div>
-                <div className="rounded-lg bg-amber-50 p-3">
-                  <p className="font-semibold text-amber-800">Debilidades</p>
-                  <p className="mt-1 text-slate-700">{analysis.foda.debilidades.slice(0, 3).join(' | ') || 'Sin datos'}</p>
-                </div>
-                <div className="rounded-lg bg-rose-50 p-3">
-                  <p className="font-semibold text-rose-800">Amenazas</p>
-                  <p className="mt-1 text-slate-700">{analysis.foda.amenazas.slice(0, 3).join(' | ') || 'Sin datos'}</p>
-                </div>
-              </div>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 bg-white p-4 md:col-span-2">
-              <h3 className="text-lg font-semibold text-slate-900">Sugerencias de gestion</h3>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                {analysis.suggestions.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
-          </section>
-        )}
-      </main>
-
-      {selectedTask ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSelectedTask(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-slate-900">{selectedTask.title}</h3>
-              <button type="button" onClick={() => setSelectedTask(null)} className="text-slate-500 hover:text-slate-700">
-                Cerrar
-              </button>
+          {boardDisplay === "table" ? (
+            <KanbanTaskTable tasks={filteredTasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />
+          ) : (
+            <div
+              ref={boardScrollRef}
+              onWheel={handleBoardWheel}
+              className={`hide-scrollbar -mx-1 px-1 pb-2 ${slideMode ? "flex gap-3 overflow-x-auto" : "grid gap-3 md:grid-cols-2 xl:grid-cols-3"}`}
+            >
+              {COLUMNS.filter((column) => isStatusVisible(column.id)).map((column) => {
+                const colTasks = filteredTasks.filter((task) => task.status === column.id);
+                return <KanbanColumn key={column.id} column={column} tasks={colTasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />;
+              })}
             </div>
-            <p className="text-sm text-slate-600">{selectedTask.description}</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-slate-100 px-2 py-1">Categoria: {selectedTask.category}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-1">Estimado: {selectedTask.estimated}</span>
-            </div>
+          )}
+        </>
+      ) : (
+        <KanbanMetricsPanel
+          analysis={analysis}
+          tasks={pageTasks}
+          roadmapLabel={ROADMAP_PAGES.find((page) => page.id === roadmapPage)?.label ?? roadmapPage}
+          roadmapProgress={roadmapProgress}
+          traces={traceEntries}
+          baseline={{
+            elapsedMs: activeTimer.elapsedMs,
+            isRunning: activeTimer.isRunning,
+            totalEstimatedHours: baseline.totalEstimatedHours,
+            doneEstimatedHours: baseline.doneEstimatedHours,
+            weeklyTargetHours: ROADMAP_WEEKLY_TARGET_HOURS[roadmapPage],
+            tasksDone: baseline.tasksDone,
+            tasksTotal: baseline.tasksTotal,
+            onStart: startTimer,
+            onPause: pauseTimer,
+            onReset: resetTimer,
+          }}
+        />
+      )}
 
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold text-slate-500">Mover a</p>
-              <div className="flex flex-wrap gap-2">
-                {COLUMNS.map((column) => (
-                  <button
-                    key={column.id}
-                    type="button"
-                    onClick={() => {
-                      moveTask(selectedTask.id, column.id);
-                      setSelectedTask(null);
-                    }}
-                    className={`rounded-lg px-3 py-1 text-sm font-semibold ${
-                      selectedTask.status === column.id ? 'bg-slate-200 text-slate-700' : 'bg-blue-600 text-white'
-                    }`}
-                  >
-                    {column.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isCreateModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setIsCreateModalOpen(false)}>
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-slate-900">Agregar tarea</h3>
-              <button type="button" onClick={() => setIsCreateModalOpen(false)} className="text-slate-500 hover:text-slate-700">
-                Cerrar
-              </button>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <input
-                value={newTask.title}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Titulo"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                value={newTask.category}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, category: e.target.value || 'general' }))}
-                placeholder="Categoria"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-              <textarea
-                value={newTask.description}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Descripcion"
-                className="md:col-span-2 min-h-24 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-              <select
-                value={newTask.priority}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, priority: e.target.value as TaskPriority }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="high">Alta</option>
-                <option value="medium">Media</option>
-                <option value="low">Baja</option>
-              </select>
-              <select
-                value={newTask.status}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, status: normalizeStatus(e.target.value) }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                {COLUMNS.map((col) => (
-                  <option key={col.id} value={col.id}>
-                    {col.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={newTask.estimated}
-                onChange={(e) => setNewTask((prev) => ({ ...prev, estimated: e.target.value || '1h' }))}
-                placeholder="Estimado (ej: 2h)"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={addTask}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-              >
-                Guardar tarea
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+      {message ? <p className="mt-4 text-sm text-slate-600">{message}</p> : null}
+      <CreateTaskModal open={createOpen} defaultCategory={categoryFilter === "all" ? "general" : categoryFilter} onClose={() => setCreateOpen(false)} onCreate={addTask} />
+      <TaskDetailsModal task={selectedTask} onClose={() => setSelectedTask(null)} />
+    </section>
   );
-};
-
-export default KanbanBoard;
+}

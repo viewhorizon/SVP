@@ -1,378 +1,219 @@
 # SPV API - Documentación
 
-## Backend Endpoints
+Endpoints, reglas y convenciones para el backend SPV.
 
-### Votos API (K-11)
+- Votos API: `POST /api/votes`, `GET /api/votes/count`, `GET /api/votes/limits`
+- Puntos API: `POST /api/points/credit`, `POST /api/points/debit`, `POST /api/points/transfer`, `POST /api/points/convert`, `POST /api/points/liveops/convert`, `GET /api/points/balance`, `GET /api/points/balance/:userId`
+- Inventario API: `GET /api/inventory/catalog`, `GET /api/inventory/me`, `POST /api/inventory/purchase`, `POST /api/inventory/lifecycle/transfer`, `POST /api/inventory/lifecycle/destroy`, `POST /api/inventory/lifecycle/transform`, `GET /api/inventory/ledger/verify`
+- Logros votados API: `GET /api/achievements`, `POST /api/achievements`, `POST /api/achievements/:achievementId/vote`, `POST /api/achievements/:achievementId/close`
+- Outbox Dispatcher API: `GET /api/outbox/pending`, `POST /api/outbox/dispatch`
+- Policy Engine API: `GET /api/policy/rules`, `POST /api/policy/evaluate`
+- Webhooks: `POST /api/webhooks/points/credit`
+- Identidad e ingesta externa: `POST /api/identity/link`, `GET /api/identity/link`, `POST /api/events/validate`, `POST /api/events/results`
+- Versionado estable adicional: mismos endpoints bajo prefijo `/api/v1/*`.
+- Planeacion: `POST /api/ai/planning/analyze`
+- Auth: `Authorization: Bearer <token>`
+- Idempotencia opcional: header `Idempotency-Key` o `x-idempotency-key`
+- Observabilidad: todas las respuestas incluyen header `x-request-id`
+- Auth modo `dev`: `Bearer dev:<uid>` cuando `AUTH_MODE=dev` o `AUTH_MODE=auto`
+- Auth modo Firebase real: `AUTH_MODE=firebase` + credenciales de servicio
+- Errores: `{ "error": "mensaje" }`
+- DB principal: `points_wallet`, `points_ledger`, `votes`, `point_rules`, `point_limits`, `inventory_catalog`, `user_inventory`, `liveops_rates`, `cross_system_transactions`
+- DB integracion externa: `identity_links`, `source_app_rates`, `external_activity_events`
+- DB logros votados: `achievement_definitions`, `achievement_votes`
+- DB outbox: `outbox_events`
+- DB policy engine: `policy_rules`
 
-#### `POST /api/votes`
-**Descripción**: Registrar un voto y generar puntos automáticamente
+## Novedades GLM completadas
 
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-Content-Type: application/json
-```
+- Rate limit de votos en memoria por usuario/IP:
+  - `VOTES_RATE_LIMIT_WINDOW_MS` (default `60000`)
+  - `VOTES_RATE_LIMIT_MAX` (default `30`)
+  - Aplica en `POST /api/votes`
+- Cache de lectura en memoria para votos:
+  - `VOTES_CACHE_TTL_SECONDS` (default `20`)
+  - Aplica en `GET /api/votes/count` y `GET /api/votes/limits`
+  - Respuesta incluye `cached: true|false`
+- Contrato OpenAPI base en `backend/openapi.yaml`.
+- Script de prueba manual de atomicidad en `backend/sql/test_cross_system_transactions_atomicity.sql`.
+- Swagger UI: `GET /docs`
+- OpenAPI raw: `GET /openapi.yaml`
+- Validacion de input con Zod en rutas criticas (`votes`, `points`, `ai/planning`, webhook):
+  - Respuesta de validacion: `{ "error": "Body invalido|Query invalida|Params invalidos", "details": [{ "path": "campo", "message": "..." }] }`
+- Idempotencia aplicada en operaciones de mutacion de votos/puntos:
+  - Repetir la misma solicitud con igual `requestId` o `Idempotency-Key` devuelve `idempotent: true` y no duplica movimientos en ledger.
+  - Primera ejecucion exitosa: `201`. Reintento idempotente: `200`.
+ - Concurrencia de saldo:
+  - Operaciones de wallet se ejecutan con transaccion SQL y bloqueo `FOR UPDATE` en `points_wallet` para evitar sobreconsumo.
 
-**Body**:
+## Variables de entorno clave
+
+- `AUTH_MODE=auto|dev|firebase`
+- `AUTH_INSECURE_FALLBACK=false|true`
+- `FIREBASE_PROJECT_ID=<id>`
+- `FIREBASE_SERVICE_ACCOUNT_JSON=<json stringificado>`
+- `PLANNING_AI_MODE=local|openai_compatible`
+- `PLANNING_AI_BASE_URL=<https://...>`
+- `PLANNING_AI_API_KEY=<secret>`
+- `PLANNING_AI_MODEL=<model-name>`
+- `VOTES_CACHE_TTL_SECONDS=<segundos de cache de lectura para votos>`
+- `WEBHOOK_SHARED_SECRET=<secret opcional para validar x-webhook-secret>`
+- `WEBHOOK_SIGNING_SECRET=<secret para firma HMAC SHA-256 de webhook>`
+- `WEBHOOK_HMAC_TOLERANCE_SECONDS=<ventana anti-replay, default 300>`
+- `OUTBOX_DISPATCH_URL=<endpoint opcional para publicar eventos pendientes>`
+- `OUTBOX_DISPATCH_INTERVAL_MS=<intervalo del worker automatico; 0 deshabilita>`
+- `OUTBOX_DISPATCH_BATCH_LIMIT=<cantidad por ciclo del worker>`
+
+## Integracion externa estandar (TierList, juegos, apps)
+
+- Flujo recomendado:
+  - La app externa envia resultados a SVP (`POST /api/events/results`).
+  - SVP valida, calcula base de puntos y persiste en DB.
+  - Regla principal de calculo base: `activityHours * votosTotales`.
+  - `score` se usa como senal de logro (achievement) cuando aplique por gameplay o votacion de logros.
+  - La app externa no escribe directo en la DB de SVP.
+- Vinculacion de identidad federada:
+  - `POST /api/identity/link` para mapear `sourceApp + externalUserId` -> `svpUserId`.
+  - `GET /api/identity/link` para resolver una vinculacion.
+- Validacion previa sin mutacion:
+  - `POST /api/events/validate` devuelve `projectedPoints`.
+- Ingesta con mutacion:
+  - `POST /api/events/results` acredita puntos con idempotencia estricta por `sourceApp + eventId`.
+  - Internamente se genera `sourceEventKey = sourceApp:eventId` para evitar doble procesamiento entre apps distintas.
+  - Cuando la ingesta se procesa, se encola evento en `outbox_events` para despacho at-least-once.
+
+## Outbox y dispatcher
+
+- Objetivo:
+  - Garantizar entrega at-least-once de eventos de dominio hacia integraciones externas.
+- Endpoints:
+  - `GET /api/outbox/pending?limit=25`: lista pendientes/reintentos.
+  - `POST /api/outbox/dispatch?limit=25`: procesa batch y actualiza estados (`sent`, `failed`, `dead_letter`).
+- Worker automatico:
+  - Se activa con `OUTBOX_DISPATCH_INTERVAL_MS > 0`.
+  - Ejecuta ciclos de dispatch por intervalo con limite `OUTBOX_DISPATCH_BATCH_LIMIT`.
+- Reintentos:
+  - Backoff progresivo por intento y corte a dead letter al superar max intentos.
+
+## Policy Engine desacoplado
+
+- Objetivo:
+  - Evaluar reglas de negocio por dominio y devolver `ProposedMutation` sin acoplar logica a las rutas.
+- Endpoints:
+  - `GET /api/policy/rules?domain=external_activity_points`: lista reglas activas por alcance (`sourceApp`, `activityType`).
+  - `POST /api/policy/evaluate`: evalua contexto y devuelve mutaciones propuestas + proyeccion de puntos.
+- Integracion actual:
+  - `POST /api/events/validate` y `POST /api/events/results` consultan `policy_rules` (`domain=external_activity_points`).
+  - Las mutaciones soportadas son `points_multiplier`, `points_bonus`, `min_points_floor`, `tag`.
+  - El response incluye bloque `policy` con reglas aplicadas y resultado de ajuste.
+
+## Logros votados por actividad
+
+- Objetivo:
+  - Definir logros por actividad que la comunidad puede votar para aprobar/rechazar desbloqueos.
+- Endpoints:
+  - `POST /api/achievements`: crea propuesta en estado `voting`.
+  - `GET /api/achievements`: lista por `activityId` y/o `status` con conteo `up/down`.
+  - `POST /api/achievements/:achievementId/vote`: voto `up` o `down` (1 voto por usuario; re-voto actualiza).
+  - `POST /api/achievements/:achievementId/close`: cierra votacion (`approved`, `rejected`, `archived`).
+- Reglas actuales:
+  - Solo se vota cuando el logro esta en estado `voting`.
+  - Solo el creador del logro puede cerrarlo.
+  - El cierre guarda snapshot de votos en metadata para auditoria.
+
+## Lifecycle de inventario (objetos dinamicos)
+
+- Endpoints:
+  - `POST /api/inventory/lifecycle/transfer`: transfiere items entre usuarios e impacta puntos equivalentes cuando `transferPoints=true`.
+  - `POST /api/inventory/lifecycle/destroy`: destruye items y acredita puntos segun `pointsValuePerItem` o valor de catalogo.
+  - `POST /api/inventory/lifecycle/transform`: transforma item origen->destino y ajusta puntos por delta de valorizacion.
+- Regla de valorizacion por defecto:
+  - Si no se envia override explicito, se usa `metadata.points_equivalent` del `inventory_catalog`.
+  - Si no existe metadata, se usa `price_spv` del catalogo.
+- Auditoria:
+  - Cada mutacion registra evento en `inventory_ledger_events` (hash-chain).
+  - Los ajustes de puntos se registran en `points_ledger` (`POINTS_TRANSFERRED_IN/OUT`, `POINTS_GRANTED`, `POINTS_DEBITED`).
+  - `GET /api/inventory/ledger/verify` acepta `sign=true|false`.
+  - Si `sign=true` y existe `LEDGER_AUDIT_SIGNING_SECRET`, devuelve `auditSignature` (`hashVersion`, `signature`, `signedAt`).
+
+Ejemplo payload (`POST /api/events/results`):
+
 ```json
 {
-  "activityId": "uuid-de-actividad",
-  "activityScope": "local", // "global" | "local" | "digital" | "real"
-  "requestId": "uuid-opcional (default: random)",
-  "eventId": "uuid-opcional (default: random)",
-  "metadata": {}
-}
-```
-
-**Respuestas**:
-
-200/201 OK - Voto procesado:
-```json
-{
-  "idempotent": false,
-  "pointsGranted": 3,
-  "balance": {
-    "available_points": 123,
-    "lifetime_points": 1240
-  },
-  "limits": {
-    "dailyLimit": 5,
-    "usedVotes": 2,
-    "remainingVotes": 3
-  },
-  "events": [
-    { "event_id": "...", "type": "VOTE_CAST" },
-    { "request_id": "...", "type": "POINTS_GRANTED" }
-  ]
-}
-```
-
-200 OK - Voto ya procesado (idempotente):
-```json
-{
-  "idempotent": true,
-  "message": "Voto ya procesado previamente",
-  "pointsGranted": 0,
-  "balance": { "available_points": 123, "lifetime_points": 1240 }
-}
-```
-
-429 Too Many Requests - Límite excedido:
-```json
-{
-  "error": "Has alcanzado el límite diario de votos",
-  "limits": {
-    "dailyLimit": 5,
-    "usedVotes": 5,
-    "remainingVotes": 0
+  "eventId": "tierlist-2026-03-08-best-news-001",
+  "sourceApp": "tierlist-global",
+  "sourceEnv": "prod",
+  "externalUserId": "usr_abc_445",
+  "activityType": "vote_result",
+  "activityId": "best_news_week_10",
+  "activityHours": 3,
+  "localVotes": 1200,
+  "globalVotes": 1200,
+  "unit": "liveops_points",
+  "metadata": {
+    "rank": 1,
+    "votesReceived": 2400
   }
 }
 ```
 
-400 Bad Request - Datos inválidos:
-```json
-{ "error": "activityId es requerido" }
-```
+Opcional por logro (score):
 
----
-
-#### `GET /api/votes/count`
-**Descripción**: Contar votos del usuario (hoy, opcionalmente por actividad)
-
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-```
-
-**Query Parameters**:
-- `activityId` (opcional): UUID de la actividad específica
-
-**Respuesta**:
 ```json
 {
-  "userId": "uuid",
-  "activityId": "uuid",
-  "votesToday": 3
+  "eventId": "tierlist-achievement-001",
+  "sourceApp": "tierlist-global",
+  "activityType": "achievement_score",
+  "activityId": "match-99",
+  "score": 125,
+  "unit": "achievement_score"
 }
 ```
 
----
+## Seguridad de webhook
 
-#### `GET /api/votes/limits`
-**Descripción**: Consultar límites diarios del usuario
+- Modo basico: header `x-webhook-secret` contra `WEBHOOK_SHARED_SECRET`.
+- Modo recomendado (HMAC):
+  - `x-webhook-timestamp`: unix epoch en segundos.
+  - `x-webhook-signature`: `sha256=<hex>` o `<hex>`.
+  - Firma esperada sobre el payload `timestamp.rawBody` usando HMAC SHA-256.
+  - Se valida tolerancia de tiempo con `WEBHOOK_HMAC_TOLERANCE_SECONDS` para evitar replay.
+  - Si llega exactamente la misma firma dentro de la ventana de tolerancia, responde `409 Webhook replay detectado`.
+  - Para idempotencia de negocio, el webhook usa `requestId`, luego `eventId`, luego `Idempotency-Key`.
 
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-```
+Nota: el detalle completo permanece en la rama remota de referencia y los archivos SQL incluidos en `backend/sql`.
 
-**Respuesta**:
-```json
-{
-  "userId": "uuid",
-  "dailyLimit": 5,
-  "usedVotes": 2,
-  "remainingVotes": 3,
-  "nextResetAt": "2026-03-19T00:00:00Z"
-}
-```
+## Manager de secretos
 
----
+- El proyecto incluye un manager local en `backend/src/services/secrets.ts`.
+- Actualmente abstrae lectura desde variables de entorno para centralizar acceso a secretos.
+- En produccion se puede reemplazar por un adapter de Secret Manager/Vault sin tocar rutas.
 
-### Puntos API (K-12)
+## Monitor transaccional SVP
 
-#### `POST /api/points/credit`
-**Descripción**: Acreditar puntos a un usuario (operación atómica con ledger)
+- Endpoint:
+  - `GET /api/monitor/transactions`
+  - `GET /api/v1/monitor/transactions`
+  - `GET /api/monitor/transactions/stream` (SSE tiempo real)
+  - `GET /api/v1/monitor/transactions/stream` (SSE tiempo real)
+- Query params opcionales:
+  - `userId`
+  - `status`
+  - `transactionType`
+  - `limit` (default 100)
+  - `intervalMs` (solo stream, default 4000)
+- Responsabilidad:
+  - SVP centraliza el monitor oficial del ledger/transacciones.
+  - Cada plataforma externa puede exponer su monitor propio para UX local, pero sin reemplazar la fuente de verdad de SVP.
 
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-Content-Type: application/json
-```
+## Glosario rapido
 
-**Body**:
-```json
-{
-  "userId": "uuid-del-usuario (default: propio)",
-  "amount": 10,
-  "requestId": "uuid-opcional (default: random)",
-  "eventId": "uuid-opcional (default: random)",
-  "reason": "manual_credit" (opcional)
-}
-```
-
-**Respuestas**:
-
-201 Created:
-```json
-{
-  "userId": "uuid",
-  "amount": 10,
-  "requestId": "uuid",
-  "eventId": "uuid",
-  "balance": {
-    "available_points": 132,
-    "lifetime_points": 1250
-  }
-}
-```
-
-400 Bad Request:
-```json
-{ "error": "amount debe ser un número positivo" }
-```
-
----
-
-#### `POST /api/points/debit`
-**Descripción**: Debitar puntos (valida saldo disponible)
-
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-Content-Type: application/json
-```
-
-**Body**:
-```json
-{
-  "userId": "uuid-del-usuario (default: propio)",
-  "amount": 5,
-  "requestId": "uuid-opcional",
-  "eventId": "uuid-opcional",
-  "reason": "manual_debit" (opcional)
-}
-```
-
-**Respuestas**:
-
-201 Created:
-```json
-{
-  "userId": "uuid",
-  "amount": 5,
-  "balance": { "available_points": 120, "lifetime_points": 1240 }
-}
-```
-
-409 Conflict - Saldo insuficiente:
-```json
-{ "error": "Saldo insuficiente" }
-```
-
----
-
-#### `POST /api/points/transfer`
-**Descripción**: Transferir puntos entre usuarios (transaccional)
-
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-```
-
-**Body**:
-```json
-{
-  "toUserId": "uuid-del-destinatario",
-  "amount": 10,
-  "requestId": "uuid-opcional"
-}
-```
-
-**Respuestas**:
-
-201 Created:
-```json
-{
-  "fromUserId": "uuid",
-  "toUserId": "uuid",
-  "amount": 10,
-  "fromBalance": { "available_points": 110, "lifetime_points": 1240 },
-  "toBalance": { "available_points": 10, "lifetime_points": 10 },
-  "transferId": "uuid"
-}
-```
-
-400/409:
-```json
-{ "error": "Error descripción" }
-```
-
----
-
-#### `POST /api/points/convert`
-**Descripción**: Convertir puntos a objetos/inventario (llama a cross_system_transactions)
-
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-```
-
-**Body**:
-```json
-{
-  "itemId": "uuid-del-item",
-  "pointsCost": 50,
-  "requestId": "uuid-opcional"
-}
-```
-
-**Respuestas**:
-
-201 Created:
-```json
-{
-  "userId": "uuid",
-  "itemId": "uuid",
-  "pointsCost": 50,
-  "balanceAfter": { "available_points": 70, "lifetime_points": 1240 },
-  "crossSystemTransactionId": "uuid",
-  "convertedAt": "2026-03-18T12:00:00Z"
-}
-```
-
----
-
-#### `GET /api/points/balance/:userId`
-**Descripción**: Consultar saldo disponible + histórico
-
-**Headers**:
-```
-Authorization: Bearer <firebase_token>
-```
-
-**Respuesta**:
-```json
-{
-  "userId": "uuid",
-  "available_points": 120,
-  "lifetime_points": 1240,
-  "last_ledger_at": "2026-03-18T12:00:00Z",
-  "created_at": "2026-01-01T00:00:00Z",
-  "updated_at": "2026-03-18T12:00:00Z"
-}
-```
-
----
-
-## Base de Datos
-
-### Tablas Core SPV
-
-#### `points_wallet`
-- `user_id` (UUID, PK) - ID del usuario
-- `available_points` (BIGINT) - Puntos disponibles
-- `lifetime_points` (BIGINT) - Histórico total
-- `last_ledger_at` (TIMESTAMPTZ) - Última actualización
-
-#### `points_ledger`
-- `ledger_id` (UUID, PK) - ID del registro ledger
-- `request_id` (UUID) - Para idempotencia
-- `event_id` (UUID, UNIQUE) - Evento de dominio único
-- `user_id` (UUID) - Usuario afectado
-- `direction` (ENUM: CREDIT/DEBIT) - Dirección del movimiento
-- `operation_type` (ENUM) - Tipo de operación
-- `amount` (BIGINT) - Cantidad de puntos
-- `balance_before/after` - Balance antes/después
-- `related_user_id` - Usuario relacionado (transferencias)
-- `activity_id` - Actividad relacionada (votos)
-- `metadata` (JSONB) - Datos flexibles
-
-#### `votes`
-- `vote_id` (UUID, PK)
-- `user_id` (UUID)
-- `activity_id` (UUID)
-- `request_id` (UUID) - Para idempotencia
-- `event_id` (UUID)
-- `points_generated` (BIGINT) - Puntos generados
-- `activity_scope` (VARCHAR) - global/local/digital/real
-- `metadata` (JSONB)
-
-#### `point_rules`
-- reglas de conversión votos→puntos versionadas
-- formula JSONB con multipliers
-
-#### `point_limits`
-- límites por día/usuario/actividad
-- para antifraude
-
----
-
-## Convenciones
-
-- **Auth**: Firebase token en header `Authorization: Bearer <token>`
-- **HTTP Status**: Estándar (200, 201, 400, 409, 429, 500)
-- **Errores**: `{ "error": "mensaje" }`
-- **Transacciones**: Siempre con `withTransaction`
-- **IDempotencia**: Cada request tiene `request_id` opcional
-- **UUIDs**: Todos los IDs son UUID
-- **Timestamps**: UTC con `NOW()`
-
----
-
-## Ejecución
-
-```bash
-# Desarrollo
-cd backend
-npm install
-node src/app.ts
-
-# O con pm2
-pm2 start src/app.ts --name spv-api
-
-# Variables de entorno
-DATABASE_URL=postgresql://...
-PORT=4000
-
-# Health check
-curl http://localhost:4000/health
-```
-
----
-
-## Integraciones
-
-- **SQLite**: Para votos `points_ledger` (SQLite ledger de respaldo opcional)
-- **Firebase**: Para autenticación de usuarios
-- **Cross System**: `cross_system_transactions` para integración Inventario/Parque 3D
+- `credit`: movimiento que suma puntos SPV al wallet.
+- `debit`: movimiento que resta puntos SPV del wallet.
+- `transfer`: movimiento de puntos entre dos usuarios (debito emisor + credito receptor).
+- `convert`: cambio de puntos SPV por activo externo (item, inventario, LiveOps).
+- `idempotency key`: clave para reintentos seguros sin duplicar efectos.
+- `concurrencia`: multiples requests simultaneas sobre el mismo recurso sin perder consistencia.
+- `ledger`: historial auditable append-only de movimientos de puntos.
+- `cross_system_transactions`: auditoria de conversiones entre sistemas (SPV, INVENTORY, LIVEOPS, etc.).
+- `scope global/local`: `global` aplica al ecosistema completo; `local` depende del parque (`park_id`).

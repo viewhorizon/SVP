@@ -112,17 +112,3 @@ VALUES
    '{"domain_event": "POINTS_TRANSFERRED_IN", "from_user": "system"}',
    NOW() - INTERVAL '2 days')
 ON CONFLICT (event_id) DO NOTHING;
-
--- ============================================
--- QUERY DE VERIFICACIÓN
--- ============================================
--- Ejecutar para verificar datos de prueba:
-
--- Verificar balances
--- SELECT user_id, available_points, lifetime_points FROM points_wallet;
-
--- Verificar votos hoy por usuario
--- SELECT user_id, COUNT(*) as votes_today FROM votes WHERE created_at >= date_trunc('day', NOW()) GROUP BY user_id;
-
--- Verificar ledger por usuario
--- SELECT user_id, operation_type, direction, amount, balance_after, created_at FROM points_ledger WHERE user_id = '11111111-1111-1111-1111-111111111111' ORDER BY created_at DESC LIMIT 10;

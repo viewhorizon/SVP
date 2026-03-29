@@ -1,4 +1,4 @@
-import { requestJSON } from './httpClient';
+import { requestJSON } from "./httpClient";
 
 export interface SpvBootstrapState {
   available: number;
@@ -9,6 +9,11 @@ export interface SpvBootstrapState {
 export interface VoteResult {
   pointsGranted: number;
   remainingVotes: number;
+}
+
+export interface ApiHealth {
+  ok: boolean;
+  service?: string;
 }
 
 const MAX_DAILY_VOTES = 5;
@@ -50,8 +55,8 @@ type VoteLimitsResponse = {
 export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrapState> {
   const [balance, voteCount, voteLimits] = await Promise.all([
     requestJSON<BalanceResponse>(`/api/points/balance/${userId}`),
-    requestJSON<VoteCountResponse>('/api/votes/count'),
-    requestJSON<VoteLimitsResponse>('/api/votes/limits'),
+    requestJSON<VoteCountResponse>("/api/votes/count"),
+    requestJSON<VoteLimitsResponse>("/api/votes/limits"),
   ]);
 
   const available = asNumber(balance.available ?? balance.points_available, 0);
@@ -65,33 +70,19 @@ export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrap
   const remainingVotes =
     remainingVotesValue ??
     Math.max(
-      asNumber(voteLimits.dailyLimit, MAX_DAILY_VOTES) -
-        asNumber(voteCount.votesToday ?? voteCount.usedToday ?? voteLimits.usedVotes, 0),
+      asNumber(voteLimits.dailyLimit, MAX_DAILY_VOTES) - asNumber(voteCount.votesToday ?? voteCount.usedToday ?? voteLimits.usedVotes, 0),
       0,
     );
 
-  return {
-    available,
-    historical,
-    remainingVotes,
-  };
+  return { available, historical, remainingVotes };
 }
 
-type VotePayload = {
-  pointsGranted?: number;
-  limits?: {
-    remainingVotes?: number;
-  };
-};
+type VotePayload = { pointsGranted?: number; limits?: { remainingVotes?: number } };
 
 export async function castVote(activityId: string, requestId: string): Promise<VoteResult> {
-  const payload = await requestJSON<VotePayload>('/api/votes', {
-    method: 'POST',
-    body: JSON.stringify({
-      activityId,
-      requestId,
-      request_id: requestId,
-    }),
+  const payload = await requestJSON<VotePayload>("/api/votes", {
+    method: "POST",
+    body: JSON.stringify({ activityId, requestId, request_id: requestId }),
   });
 
   return {
@@ -100,36 +91,24 @@ export async function castVote(activityId: string, requestId: string): Promise<V
   };
 }
 
-type TransferPayload = {
-  fromUserId: string;
-  toUserId: string;
-  amount: number;
-  requestId: string;
-};
+type TransferPayload = { fromUserId: string; toUserId: string; amount: number; requestId: string };
 
 export async function transferPoints(payload: TransferPayload): Promise<void> {
-  await requestJSON('/api/points/transfer', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...payload,
-      request_id: payload.requestId,
-    }),
+  await requestJSON("/api/points/transfer", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, request_id: payload.requestId }),
   });
 }
 
-type CreditPayload = {
-  userId: string;
-  amount: number;
-  reason: string;
-  requestId: string;
-};
+type CreditPayload = { userId: string; amount: number; reason: string; requestId: string };
 
 export async function creditPoints(payload: CreditPayload): Promise<void> {
-  await requestJSON('/api/points/credit', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...payload,
-      request_id: payload.requestId,
-    }),
+  await requestJSON("/api/points/credit", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, request_id: payload.requestId }),
   });
+}
+
+export async function checkApiHealth(): Promise<ApiHealth> {
+  return requestJSON<ApiHealth>("/health");
 }

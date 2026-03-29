@@ -1,29 +1,29 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
-interface Props {
+type Props = {
   children: ReactNode;
-}
+};
 
-interface State {
+type State = {
   hasError: boolean;
   message: string;
-}
+};
 
 class AppErrorBoundary extends Component<Props, State> {
   state: State = {
     hasError: false,
-    message: '',
+    message: "",
   };
 
   static getDerivedStateFromError(error: Error): State {
     return {
       hasError: true,
-      message: error.message || 'Error de render en la aplicacion',
+      message: error.message || "Error de render en la aplicacion",
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[AppErrorBoundary] Error atrapado:', error, errorInfo);
+    console.error("[AppErrorBoundary] Error atrapado:", error, errorInfo);
   }
 
   private handleReload = (): void => {
