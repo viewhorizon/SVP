@@ -19,7 +19,7 @@ async function executeMigrations() {
     const sql = neon(DATABASE_URL);
 
     // Read the migration file
-    const migrationPath = path.join(__dirname, '01_run_all_migrations.sql');
+    const migrationPath = '/vercel/share/v0-project/scripts/01_run_all_migrations.sql';
     const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
 
     console.log('[v0] Ejecutando migraciones...');
