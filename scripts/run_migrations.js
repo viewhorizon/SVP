@@ -1,5 +1,10 @@
 import { neon } from '@neondatabase/serverless';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -29,8 +34,9 @@ async function executeMigrations() {
 
     for (const migrationFile of migrations) {
       try {
-        const migrationSQL = fs.readFileSync(migrationFile, 'utf-8');
-        console.log(`[v0] Leyendo: ${migrationFile.split('/').pop()}`);
+        const fullPath = migrationFile;
+        console.log(`[v0] Leyendo: ${path.basename(migrationFile)}`);
+        const migrationSQL = fs.readFileSync(fullPath, 'utf-8');
         
         // Split into individual statements
         const statements = migrationSQL
@@ -40,7 +46,7 @@ async function executeMigrations() {
 
         for (const statement of statements) {
           try {
-            await sql([statement]);
+            await sql(statement);
             executed++;
           } catch (error) {
             if (error.message && (error.message.includes('already exists') || error.message.includes('EEXIST'))) {
@@ -52,7 +58,7 @@ async function executeMigrations() {
           }
         }
         
-        console.log(`[v0] ✅ ${migrationFile.split('/').pop()} completada`);
+        console.log(`[v0] ✅ ${path.basename(migrationFile)} completada`);
       } catch (fileError) {
         console.error(`[v0] Error leyendo ${migrationFile}:`, fileError.message);
       }
