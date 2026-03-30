@@ -86,14 +86,14 @@ export function useSpv() {
       const health = await checkApiHealth();
       if (health.ok) {
         setHealthState("online");
-        setHealthLabel(`API online (${health.service ?? "spv-api"})`);
+        setHealthLabel(`Disponible (${health.service ?? "spv-api"})`);
         return;
       }
       setHealthState("offline");
-      setHealthLabel("API no disponible");
+      setHealthLabel("No disponible");
     } catch {
       setHealthState("offline");
-      setHealthLabel("API no disponible");
+      setHealthLabel("No disponible");
     }
   };
 

@@ -545,7 +545,7 @@ export default function KanbanBoard() {
             >
               {COLUMNS.filter((column) => isStatusVisible(column.id)).map((column) => {
                 const colTasks = filteredTasks.filter((task) => task.status === column.id);
-                return <KanbanColumn key={column.id} column={column} tasks={colTasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />;
+                return <KanbanColumn key={column.id} column={column} tasks={colTasks} allTasks={tasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />;
               })}
             </div>
           )}

@@ -14,6 +14,14 @@ export interface Task {
   status: TaskStatus;
   roadmapPage?: RoadmapPageId | "custom";
   notes?: string;
+  // Sprint 3: Nuevos campos para criterios de aceptacion, dependencias y riesgos
+  acceptanceCriteria?: string[];
+  dependencies?: string[];
+  risks?: string[];
+  // Backlog estrategico: tareas hijo que se despliegan de esta
+  childTaskIds?: string[];
+  parentTaskId?: string;
+  isStrategic?: boolean;
 }
 
 export type TaskLike = Partial<Task> | string;
@@ -57,9 +65,9 @@ export const ROADMAP_WEEKLY_TARGET_HOURS: Record<RoadmapPageId, number> = {
   "sprint-3": 42,
 };
 
-export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string }> = [
-  { id: "backlog", label: "Backlog", color: "from-slate-500 to-slate-600" },
-  { id: "todo", label: "Por Hacer / Pendiente", color: "from-rose-500 to-rose-600" },
+export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string; isStrategic?: boolean }> = [
+  { id: "backlog", label: "Backlog Estrategico", color: "from-slate-500 to-slate-600", isStrategic: true },
+  { id: "todo", label: "Sprint Log", color: "from-rose-500 to-rose-600" },
   { id: "in-progress", label: "En Proceso", color: "from-amber-500 to-amber-600" },
   { id: "review", label: "Revision", color: "from-violet-500 to-violet-600" },
   { id: "done", label: "Completado", color: "from-emerald-500 to-emerald-600" },
@@ -131,12 +139,113 @@ export const DEFAULT_TASKS: Task[] = [
   { id: "nxt-12", title: "Panel de trazabilidad por requestId y eventId", description: "Vista operativa para soporte y auditoria de transacciones", category: "monitoring", priority: "medium", estimated: "5h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-13", title: "Monitor transaccional base del SVP", description: "Endpoint consolidado para consultar transacciones cross-system con filtros", category: "monitoring", priority: "medium", estimated: "3h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-14", title: "Stream en tiempo real para monitor transaccional", description: "Agregar endpoint SSE para snapshots periodicos de transacciones del SVP", category: "monitoring", priority: "medium", estimated: "4h", status: "done", roadmapPage: "sprint-2" },
-  { id: "sp3-01", title: "Hash audit endpoint firmado", description: "Exponer verificacion de integridad con firma de servidor y hashVersion", category: "ledger", priority: "high", estimated: "6h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-02", title: "Outbox dead-letter replay seguro", description: "Herramienta para reintentar eventos DLQ con control de idempotencia", category: "integration", priority: "high", estimated: "7h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-03", title: "Alertas operativas de dispatcher", description: "Disparar alertas por backlog envejecido y fallos consecutivos", category: "ops", priority: "medium", estimated: "5h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-04", title: "Rate limit distribuido", description: "Agregar opcion Redis para rate limiting multi-instancia", category: "security", priority: "medium", estimated: "6h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-05", title: "Suite automatizada de carga para votos/eventos", description: "Escenarios de stress para throughput y latencia", category: "testing", priority: "medium", estimated: "8h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-06", title: "Panel de conciliacion contable", description: "Vista para verificar invariantes de ledger y desbalances", category: "monitoring", priority: "high", estimated: "7h", status: "done", roadmapPage: "sprint-3" },
+  { 
+    id: "sp3-01", 
+    title: "Hash audit endpoint firmado", 
+    description: "Exponer verificacion de integridad con firma de servidor y hashVersion", 
+    category: "ledger", 
+    priority: "high", 
+    estimated: "6h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Endpoint GET /api/v1/audit/hash/{ledgerId} retorna hash verificable",
+      "Respuesta incluye hashVersion, timestamp y firma del servidor",
+      "Verificacion de cadena completa en menos de 500ms para 10k registros"
+    ],
+    dependencies: ["nxt-01", "nxt-02"],
+    risks: ["Rendimiento degradado con ledgers muy grandes"]
+  },
+  { 
+    id: "sp3-02", 
+    title: "Outbox dead-letter replay seguro", 
+    description: "Herramienta para reintentar eventos DLQ con control de idempotencia", 
+    category: "integration", 
+    priority: "high", 
+    estimated: "7h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Panel muestra eventos en DLQ con filtros por fecha y tipo",
+      "Boton de replay individual y masivo con confirmacion",
+      "Control de idempotencia previene duplicados",
+      "Maximo 3 reintentos por evento"
+    ],
+    dependencies: ["nxt-03", "nxt-04"],
+    risks: ["Eventos corruptos pueden bloquear cola", "Replay masivo puede saturar sistema destino"]
+  },
+  { 
+    id: "sp3-03", 
+    title: "Alertas operativas de dispatcher", 
+    description: "Disparar alertas por backlog envejecido y fallos consecutivos", 
+    category: "ops", 
+    priority: "medium", 
+    estimated: "5h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Alerta si backlog supera 1000 eventos pendientes",
+      "Alerta si evento tiene mas de 5 minutos sin procesar",
+      "Alerta despues de 3 fallos consecutivos",
+      "Notificacion via webhook configurable"
+    ],
+    dependencies: ["nxt-04"],
+    risks: ["Alertas falsas por picos temporales"]
+  },
+  { 
+    id: "sp3-04", 
+    title: "Rate limit distribuido", 
+    description: "Agregar opcion Redis para rate limiting multi-instancia", 
+    category: "security", 
+    priority: "medium", 
+    estimated: "6h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Soporte Upstash Redis como backend de rate limiting",
+      "Fallback a in-memory si Redis no disponible",
+      "Limites configurables: votos (100/h), puntos (50/h), eventos (200/h)",
+      "Dashboard muestra uso actual vs limite"
+    ],
+    dependencies: [],
+    risks: ["Latencia adicional por llamadas a Redis", "Inconsistencia temporal entre instancias"]
+  },
+  { 
+    id: "sp3-05", 
+    title: "Suite automatizada de carga para votos/eventos", 
+    description: "Escenarios de stress para throughput y latencia", 
+    category: "testing", 
+    priority: "medium", 
+    estimated: "8h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "4 escenarios de prueba: baseline, stress, spike, endurance",
+      "Metricas de p50, p95, p99 latencia",
+      "Throughput objetivo: 1000 votos/segundo",
+      "Reporte exportable en JSON"
+    ],
+    dependencies: ["sp3-04"],
+    risks: ["Pruebas pueden afectar ambiente productivo si no se aislan"]
+  },
+  { 
+    id: "sp3-06", 
+    title: "Panel de conciliacion contable", 
+    description: "Vista para verificar invariantes de ledger y desbalances", 
+    category: "monitoring", 
+    priority: "high", 
+    estimated: "7h", 
+    status: "done", 
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "5 validaciones contables: balance total, hash chain, limites, orphan refs, duplicados",
+      "Indicador visual verde/amarillo/rojo por validacion",
+      "Exportacion CSV de discrepancias encontradas",
+      "Reconciliacion automatica cada hora"
+    ],
+    dependencies: ["nxt-01", "nxt-02", "sp3-01"],
+    risks: ["Discrepancias historicas pueden requerir correccion manual"]
+  },
 ];
 
 const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
