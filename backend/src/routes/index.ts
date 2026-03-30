@@ -9,6 +9,11 @@ import { createAchievementsRouter } from './achievements.routes';
 import { createOutboxRouter } from './outbox.routes';
 import { createPolicyRouter } from './policy.routes';
 import { createMonitorRouter } from './monitor.routes';
+// Sprint 3 routes
+import { createDeadLetterRouter } from './deadLetter.routes';
+import { createAlertsRouter } from './alerts.routes';
+import { createLoadTestRouter } from './loadTest.routes';
+import { createReconciliationRouter } from './reconciliation.routes';
 
 export function registerApiRoutes(app: Express, pool: Pool) {
   const routeFactories = [
@@ -21,6 +26,11 @@ export function registerApiRoutes(app: Express, pool: Pool) {
     () => createPolicyRouter({ pool }),
     () => createMonitorRouter({ pool }),
     () => createAiPlanningRouter(),
+    // Sprint 3
+    () => createDeadLetterRouter({ pool }),
+    () => createAlertsRouter({ pool }),
+    () => createLoadTestRouter(),
+    () => createReconciliationRouter({ pool }),
   ];
 
   // Keep /api for compatibility and expose /api/v1 as a stable integration contract.
