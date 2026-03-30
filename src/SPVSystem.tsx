@@ -1,9 +1,13 @@
-import { Activity, Coins, History, Vote } from "lucide-react";
+import { Activity, Coins, History, Vote, AlertCircle, Zap, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import { useSpv } from "./hooks/useSpv";
+import { DeadLetterPanel } from "./components/Sprint3/DeadLetterPanel";
+import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
+import { LoadTestPanel } from "./components/Sprint3/LoadTestPanel";
+import { ReconciliationPanel } from "./components/Sprint3/ReconciliationPanel";
 
 export default function SPVSystem() {
-  const [activeTab, setActiveTab] = useState<"activities" | "points" | "history">("activities");
+  const [activeTab, setActiveTab] = useState<"activities" | "points" | "history" | "sprint3">("activities");
   const { actions, constants, state } = useSpv();
   const {
     amount,
@@ -35,10 +39,13 @@ export default function SPVSystem() {
         </div>
       </div>
 
-      <div className="mt-4 inline-flex rounded-full border border-slate-300 bg-white p-1 text-sm">
-        <button type="button" onClick={() => setActiveTab("activities")} className={`rounded-full px-3 py-1 ${activeTab === "activities" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Actividades</button>
-        <button type="button" onClick={() => setActiveTab("points")} className={`rounded-full px-3 py-1 ${activeTab === "points" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Puntos</button>
-        <button type="button" onClick={() => setActiveTab("history")} className={`rounded-full px-3 py-1 ${activeTab === "history" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Historial</button>
+      <div className="mt-4 inline-flex rounded-full border border-slate-300 bg-white p-1 text-sm overflow-x-auto">
+        <button type="button" onClick={() => setActiveTab("activities")} className={`rounded-full px-3 py-1 whitespace-nowrap ${activeTab === "activities" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Actividades</button>
+        <button type="button" onClick={() => setActiveTab("points")} className={`rounded-full px-3 py-1 whitespace-nowrap ${activeTab === "points" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Puntos</button>
+        <button type="button" onClick={() => setActiveTab("history")} className={`rounded-full px-3 py-1 whitespace-nowrap ${activeTab === "history" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Historial</button>
+        <button type="button" onClick={() => setActiveTab("sprint3")} className={`rounded-full px-3 py-1 whitespace-nowrap inline-flex items-center gap-1 ${activeTab === "sprint3" ? "bg-blue-600 text-white" : "text-slate-600"}`}>
+          <Zap size={14} /> Sprint 3
+        </button>
       </div>
 
       {activeTab === "activities" ? (
@@ -88,8 +95,36 @@ export default function SPVSystem() {
         </section>
       ) : null}
 
-      {message ? <p className="mt-4 text-sm font-medium text-blue-700">{message}</p> : null}
-      {lastRequestId ? <p className="mt-1 text-xs text-slate-500">Request ID: {lastRequestId}</p> : null}
+      {activeTab === "sprint3" ? (
+        <section className="mt-5 space-y-6">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
+              <AlertCircle size={18} /> Sprint 3: Operaciones avanzadas
+            </p>
+            <p className="mt-2 text-sm text-amber-800">
+              Herramientas para gestionar colas de repetición, alertas operativas, pruebas de carga y conciliación contable.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <DeadLetterPanel />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <AlertsPanel />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+              <LoadTestPanel />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+              <ReconciliationPanel />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {message && activeTab !== "sprint3" ? <p className="mt-4 text-sm font-medium text-blue-700">{message}</p> : null}
+      {lastRequestId && activeTab !== "sprint3" ? <p className="mt-1 text-xs text-slate-500">Request ID: {lastRequestId}</p> : null}
     </section>
   );
 }

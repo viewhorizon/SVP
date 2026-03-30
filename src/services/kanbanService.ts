@@ -132,11 +132,11 @@ export const DEFAULT_TASKS: Task[] = [
   { id: "nxt-13", title: "Monitor transaccional base del SVP", description: "Endpoint consolidado para consultar transacciones cross-system con filtros", category: "monitoring", priority: "medium", estimated: "3h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-14", title: "Stream en tiempo real para monitor transaccional", description: "Agregar endpoint SSE para snapshots periodicos de transacciones del SVP", category: "monitoring", priority: "medium", estimated: "4h", status: "done", roadmapPage: "sprint-2" },
   { id: "sp3-01", title: "Hash audit endpoint firmado", description: "Exponer verificacion de integridad con firma de servidor y hashVersion", category: "ledger", priority: "high", estimated: "6h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-02", title: "Outbox dead-letter replay seguro", description: "Herramienta para reintentar eventos DLQ con control de idempotencia", category: "integration", priority: "high", estimated: "7h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-03", title: "Alertas operativas de dispatcher", description: "Disparar alertas por backlog envejecido y fallos consecutivos", category: "ops", priority: "medium", estimated: "5h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-04", title: "Rate limit distribuido", description: "Agregar opcion Redis para rate limiting multi-instancia", category: "security", priority: "medium", estimated: "6h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-05", title: "Suite automatizada de carga para votos/eventos", description: "Escenarios de stress para throughput y latencia", category: "testing", priority: "medium", estimated: "8h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-06", title: "Panel de conciliacion contable", description: "Vista para verificar invariantes de ledger y desbalances", category: "monitoring", priority: "high", estimated: "7h", status: "backlog", roadmapPage: "sprint-3" },
+  { id: "sp3-02", title: "Outbox dead-letter replay seguro", description: "Herramienta para reintentar eventos DLQ con control de idempotencia", category: "integration", priority: "high", estimated: "7h", status: "done", roadmapPage: "sprint-3" },
+  { id: "sp3-03", title: "Alertas operativas de dispatcher", description: "Disparar alertas por backlog envejecido y fallos consecutivos", category: "ops", priority: "medium", estimated: "5h", status: "done", roadmapPage: "sprint-3" },
+  { id: "sp3-04", title: "Rate limit distribuido", description: "Agregar opcion Redis para rate limiting multi-instancia", category: "security", priority: "medium", estimated: "6h", status: "done", roadmapPage: "sprint-3" },
+  { id: "sp3-05", title: "Suite automatizada de carga para votos/eventos", description: "Escenarios de stress para throughput y latencia", category: "testing", priority: "medium", estimated: "8h", status: "done", roadmapPage: "sprint-3" },
+  { id: "sp3-06", title: "Panel de conciliacion contable", description: "Vista para verificar invariantes de ledger y desbalances", category: "monitoring", priority: "high", estimated: "7h", status: "done", roadmapPage: "sprint-3" },
 ];
 
 const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
@@ -177,6 +177,11 @@ const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "nxt-12": "done",
   "nxt-14": "done",
   "sp3-01": "done",
+  "sp3-02": "done",
+  "sp3-03": "done",
+  "sp3-04": "done",
+  "sp3-05": "done",
+  "sp3-06": "done",
 };
 
 const applyTaskStatusOverrides = (tasks: Task[]): Task[] =>
