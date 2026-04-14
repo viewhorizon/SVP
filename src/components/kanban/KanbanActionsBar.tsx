@@ -14,6 +14,8 @@ interface KanbanActionsBarProps {
   onExportJson: () => void;
   onExportJiraCsv: () => void;
   onExportAsanaCsv: () => void;
+  onToggleStrategicBacklog?: () => void;
+  showStrategicBacklog?: boolean;
 }
 
 type ExportFormat = "trello" | "jira" | "asana" | "json";
@@ -38,6 +40,8 @@ export function KanbanActionsBar({
   onExportJson,
   onExportJiraCsv,
   onExportAsanaCsv,
+  onToggleStrategicBacklog,
+  showStrategicBacklog,
 }: KanbanActionsBarProps) {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -76,7 +80,11 @@ export function KanbanActionsBar({
         <button type="button" onClick={onOpenCreateModal} className="kanban-btn inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Nueva tarea</button>
         <button type="button" onClick={onImportFile} className="kanban-btn inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><Upload size={16} /> Importar tablero</button>
         <button type="button" onClick={onAnalyzeFile} className="kanban-btn inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"><Sparkles size={16} /> Analizar IA</button>
-        <button type="button" onClick={onAnalyzeBoard} className="kanban-btn inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Analizar tablero</button>
+        {onToggleStrategicBacklog && (
+          <button type="button" onClick={onToggleStrategicBacklog} className={`kanban-btn inline-flex items-center gap-2 rounded-lg border ${showStrategicBacklog ? 'bg-slate-100 border-slate-400' : 'border-slate-300'} bg-white px-3 py-2 text-sm font-semibold text-slate-700`}>
+            {showStrategicBacklog ? '✓ Backlog Estrategico' : 'Backlog Estrategico'}
+          </button>
+        )}
         <button type="button" onClick={onToggleDisplay} className="kanban-btn inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
           {boardDisplay === "kanban" ? "Vista tabla" : "Vista kanban"}
         </button>
