@@ -1,7 +1,7 @@
 import { 
   Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, 
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
-  Search, Filter, Table, RefreshCw
+  Search, Filter, Table, RefreshCw, Copy, Check
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useSpv } from "./hooks/useSpv";
@@ -34,6 +34,7 @@ export default function SPVSystem() {
   const [newActivityName, setNewActivityName] = useState("");
   const [newActivityType, setNewActivityType] = useState<"global" | "local">("local");
   const [showCreateActivity, setShowCreateActivity] = useState(false);
+  const [copiedConsole, setCopiedConsole] = useState(false);
   
   const { actions, constants, state } = useSpv();
   const {
@@ -160,6 +161,17 @@ export default function SPVSystem() {
     a.click();
   };
 
+  const copyConsoleToClipboard = () => {
+    const consoleText = simulationEvents.map(evt => 
+      `[${evt.timestamp}] ${evt.type.toUpperCase()} - ${evt.description}${evt.details ? ' - ' + evt.details : ''}`
+    ).join('\n');
+    
+    navigator.clipboard.writeText(consoleText || "No events to copy").then(() => {
+      setCopiedConsole(true);
+      setTimeout(() => setCopiedConsole(false), 2000);
+    });
+  };
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-6">
       {/* Header */}
@@ -275,23 +287,36 @@ export default function SPVSystem() {
             </div>
           </div>
           
-          {/* Consola de eventos */}
-          <div className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg bg-slate-900 p-3 font-mono text-xs">
-            {simulationEvents.length === 0 ? (
-              <p className="text-slate-400">Esperando eventos... Realiza acciones para ver la simulacion.</p>
-            ) : (
-              simulationEvents.map((evt) => (
-                <div key={evt.id} className="flex items-start gap-2 text-slate-300">
-                  <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${evt.status === "success" ? "bg-emerald-400" : evt.status === "error" ? "bg-rose-400" : "bg-amber-400"}`} />
-                  <span className="text-slate-500">[{evt.timestamp}]</span>
-                  <span className={`${evt.status === "success" ? "text-emerald-400" : evt.status === "error" ? "text-rose-400" : "text-amber-400"}`}>
-                    {evt.type.toUpperCase()}
-                  </span>
-                  <span className="text-white">{evt.description}</span>
-                  {evt.details && <span className="text-slate-400">- {evt.details}</span>}
-                </div>
-              ))
-            )}
+          {/* Consola de eventos con boton copy */}
+          <div className="mt-3 rounded-lg bg-slate-900 overflow-hidden">
+            <div className="flex items-center justify-between bg-slate-800 px-3 py-2">
+              <span className="text-xs font-semibold text-slate-300">Consola de Eventos</span>
+              <button
+                type="button"
+                onClick={copyConsoleToClipboard}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
+              >
+                {copiedConsole ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                {copiedConsole ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+            <div className="max-h-40 space-y-1 overflow-y-auto p-3 font-mono text-xs">
+              {simulationEvents.length === 0 ? (
+                <p className="text-slate-400">Esperando eventos... Realiza acciones para ver la simulacion.</p>
+              ) : (
+                simulationEvents.map((evt) => (
+                  <div key={evt.id} className="flex items-start gap-2 text-slate-300">
+                    <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${evt.status === "success" ? "bg-emerald-400" : evt.status === "error" ? "bg-rose-400" : "bg-amber-400"}`} />
+                    <span className="text-slate-500">[{evt.timestamp}]</span>
+                    <span className={`${evt.status === "success" ? "text-emerald-400" : evt.status === "error" ? "text-rose-400" : "text-amber-400"}`}>
+                      {evt.type.toUpperCase()}
+                    </span>
+                    <span className="text-white">{evt.description}</span>
+                    {evt.details && <span className="text-slate-400">- {evt.details}</span>}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -453,7 +478,7 @@ export default function SPVSystem() {
                     value={userFilter}
                     onChange={(event) => {
                       setUserFilter(event.target.value);
-                      setReceiver(event.target.value);
+                      if (!event.target.value) setReceiver("");
                     }}
                     placeholder="Buscar usuario..."
                     className="w-full rounded-lg border border-slate-300 pl-9 pr-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
