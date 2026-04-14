@@ -16,6 +16,36 @@ export interface ApiHealth {
   service?: string;
 }
 
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  pointsBalance: number;
+}
+
+export interface Activity {
+  id: string;
+  name: string;
+  type: "global" | "local";
+  pointsPerHour: number;
+  votes: number;
+  context: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Transaction {
+  id: string;
+  type: "vote" | "transfer" | "credit" | "debit";
+  amount: number;
+  description: string;
+  status: "success" | "pending" | "error";
+  fromUserId?: string;
+  toUserId?: string;
+  activityId?: string;
+  createdAt: string;
+}
+
 const MAX_DAILY_VOTES = 5;
 
 const asNumber = (value: unknown, fallback = 0): number => {
@@ -52,6 +82,10 @@ type VoteLimitsResponse = {
   usedVotes?: number;
 };
 
+// =====================
+// READ Operations
+// =====================
+
 export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrapState> {
   const [balance, voteCount, voteLimits] = await Promise.all([
     requestJSON<BalanceResponse>(`/api/points/balance/${userId}`),
@@ -76,6 +110,54 @@ export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrap
 
   return { available, historical, remainingVotes };
 }
+
+export async function checkApiHealth(): Promise<ApiHealth> {
+  return requestJSON<ApiHealth>("/health");
+}
+
+export async function getUsers(): Promise<User[]> {
+  try {
+    return await requestJSON<User[]>("/api/users");
+  } catch {
+    // Fallback con usuarios mock para desarrollo
+    return [
+      { id: "user-001", username: "carlos", displayName: "Carlos Garcia", pointsBalance: 150 },
+      { id: "user-002", username: "laura", displayName: "Laura Martinez", pointsBalance: 230 },
+      { id: "user-003", username: "miguel", displayName: "Miguel Lopez", pointsBalance: 89 },
+      { id: "user-004", username: "ana", displayName: "Ana Rodriguez", pointsBalance: 320 },
+      { id: "user-005", username: "pedro", displayName: "Pedro Sanchez", pointsBalance: 175 },
+    ];
+  }
+}
+
+export async function getActivities(): Promise<Activity[]> {
+  try {
+    return await requestJSON<Activity[]>("/api/activities");
+  } catch {
+    return [];
+  }
+}
+
+export async function getTransactions(userId?: string): Promise<Transaction[]> {
+  try {
+    const url = userId ? `/api/transactions?userId=${userId}` : "/api/transactions";
+    return await requestJSON<Transaction[]>(url);
+  } catch {
+    return [];
+  }
+}
+
+export async function getTableData(tableName: string): Promise<Record<string, unknown>[]> {
+  try {
+    return await requestJSON<Record<string, unknown>[]>(`/api/data/${tableName}`);
+  } catch {
+    return [];
+  }
+}
+
+// =====================
+// CREATE Operations
+// =====================
 
 type VotePayload = { pointsGranted?: number; limits?: { remainingVotes?: number } };
 
@@ -109,6 +191,74 @@ export async function creditPoints(payload: CreditPayload): Promise<void> {
   });
 }
 
-export async function checkApiHealth(): Promise<ApiHealth> {
-  return requestJSON<ApiHealth>("/health");
+export async function createActivity(activity: Omit<Activity, "id" | "createdAt" | "updatedAt">): Promise<Activity> {
+  try {
+    return await requestJSON<Activity>("/api/activities", {
+      method: "POST",
+      body: JSON.stringify(activity),
+    });
+  } catch {
+    // Fallback local
+    return {
+      ...activity,
+      id: `act-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// =====================
+// UPDATE Operations
+// =====================
+
+export async function updateActivity(id: string, updates: Partial<Activity>): Promise<Activity> {
+  try {
+    return await requestJSON<Activity>(`/api/activities/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  } catch {
+    // Fallback local
+    return { id, ...updates } as Activity;
+  }
+}
+
+export async function updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
+  try {
+    return await requestJSON<Transaction>(`/api/transactions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  } catch {
+    return { id, ...updates } as Transaction;
+  }
+}
+
+// =====================
+// DELETE Operations
+// =====================
+
+export async function deleteActivity(id: string): Promise<void> {
+  try {
+    await requestJSON(`/api/activities/${id}`, { method: "DELETE" });
+  } catch {
+    // Fallback silencioso
+  }
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  try {
+    await requestJSON(`/api/transactions/${id}`, { method: "DELETE" });
+  } catch {
+    // Fallback silencioso
+  }
+}
+
+export async function cancelTransfer(transactionId: string): Promise<void> {
+  try {
+    await requestJSON(`/api/points/transfer/${transactionId}/cancel`, { method: "POST" });
+  } catch {
+    // Fallback silencioso
+  }
 }

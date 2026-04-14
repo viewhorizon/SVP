@@ -1,5 +1,9 @@
-import { Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { 
+  Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, 
+  Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
+  Search, Filter, Table, RefreshCw
+} from "lucide-react";
+import { useState, useMemo } from "react";
 import { useSpv } from "./hooks/useSpv";
 import { DeadLetterPanel } from "./components/Sprint3/DeadLetterPanel";
 import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
@@ -10,7 +14,7 @@ type TabId = "activities" | "points" | "history" | "operations";
 
 interface SimulationEvent {
   id: string;
-  type: "vote" | "transfer" | "credit" | "integration";
+  type: "vote" | "transfer" | "credit" | "integration" | "system";
   description: string;
   timestamp: string;
   status: "success" | "pending" | "error";
@@ -22,9 +26,18 @@ export default function SPVSystem() {
   const [simulationMode, setSimulationMode] = useState(false);
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<string>("inventory");
+  const [userFilter, setUserFilter] = useState("");
+  const [historyFilter, setHistoryFilter] = useState("");
+  const [showDataTable, setShowDataTable] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<string | null>(null);
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null);
+  const [newActivityName, setNewActivityName] = useState("");
+  const [newActivityType, setNewActivityType] = useState<"global" | "local">("local");
+  const [showCreateActivity, setShowCreateActivity] = useState(false);
   
   const { actions, constants, state } = useSpv();
   const {
+    activities,
     amount,
     groupedActivities,
     healthLabel,
@@ -36,24 +49,54 @@ export default function SPVSystem() {
     receiver,
     todayVotesUsed,
     totalPointsAccumulated,
+    registeredUsers,
+    isLoading,
   } = state;
 
+  // Filtrar usuarios por búsqueda
+  const filteredUsers = useMemo(() => {
+    if (!userFilter.trim()) return registeredUsers;
+    const search = userFilter.toLowerCase();
+    return registeredUsers.filter(
+      (u) => u.username.toLowerCase().includes(search) || u.displayName.toLowerCase().includes(search)
+    );
+  }, [registeredUsers, userFilter]);
+
+  // Filtrar historial por búsqueda
+  const filteredHistory = useMemo(() => {
+    if (!historyFilter.trim()) return history;
+    const search = historyFilter.toLowerCase();
+    return history.filter((h) => h.text.toLowerCase().includes(search));
+  }, [history, historyFilter]);
+
+  // Evitar duplicados en eventos de simulación usando Set de IDs
   const addSimulationEvent = (event: Omit<SimulationEvent, "id" | "timestamp">) => {
+    const eventId = `evt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newEvent: SimulationEvent = {
       ...event,
-      id: `evt-${Date.now()}`,
+      id: eventId,
       timestamp: new Date().toLocaleTimeString("es-ES"),
     };
-    setSimulationEvents((prev) => [newEvent, ...prev].slice(0, 50));
+    setSimulationEvents((prev) => {
+      // Evitar duplicados verificando descripción en los últimos 2 segundos
+      const twoSecondsAgo = Date.now() - 2000;
+      const recentDuplicate = prev.find(
+        (e) => e.description === newEvent.description && 
+        new Date(`1970-01-01 ${e.timestamp}`).getTime() > twoSecondsAgo
+      );
+      if (recentDuplicate) return prev;
+      return [newEvent, ...prev].slice(0, 100);
+    });
   };
 
   const handleVoteWithSimulation = async (activityId: string) => {
-    if (simulationMode) {
+    const activity = [...groupedActivities.global, ...groupedActivities.local].find((a) => a.id === activityId);
+    if (simulationMode && activity) {
       addSimulationEvent({
         type: "vote",
-        description: `Voto simulado en actividad ${activityId}`,
+        description: `Voto en "${activity.name}"`,
         status: "success",
-        details: "Puntos otorgados: +10",
+        details: `+${Math.round(activity.pointsPerHour * 2)} pts otorgados`,
       });
     }
     await actions.handleVote(activityId);
@@ -63,7 +106,7 @@ export default function SPVSystem() {
     if (simulationMode) {
       addSimulationEvent({
         type: "transfer",
-        description: `Transferencia simulada de ${amount} pts a ${receiver}`,
+        description: `Transferencia de ${amount} pts a @${receiver}`,
         status: "pending",
         details: "Procesando en ledger...",
       });
@@ -73,18 +116,19 @@ export default function SPVSystem() {
       setTimeout(() => {
         addSimulationEvent({
           type: "transfer",
-          description: `Transferencia completada: ${amount} pts a ${receiver}`,
+          description: `Transferencia completada: ${amount} pts`,
           status: "success",
+          details: `Destinatario: @${receiver}`,
         });
-      }, 500);
+      }, 800);
     }
   };
 
   const simulateExternalEvent = () => {
     const eventTypes = [
-      { type: "integration" as const, desc: "Evento de inventario recibido", details: "SKU-12345 actualizado" },
+      { type: "integration" as const, desc: `Evento de ${selectedIntegration} recibido`, details: "SKU-12345 actualizado" },
       { type: "credit" as const, desc: "Puntos acreditados por compra", details: "+50 pts por pedido #9821" },
-      { type: "integration" as const, desc: "Sincronizacion con app externa", details: "150 registros procesados" },
+      { type: "system" as const, desc: "Sincronizacion completada", details: "150 registros procesados" },
     ];
     const randomEvent = eventTypes[Math.floor(Math.random() * eventTypes.length)];
     addSimulationEvent({ ...randomEvent, status: "success" });
@@ -97,34 +141,36 @@ export default function SPVSystem() {
     { id: "operations", label: "Operaciones", icon: <Settings size={16} />, description: "Herramientas y monitoreo" },
   ];
 
+  const exportHistoryCSV = () => {
+    const headers = ["ID", "Descripcion", "Tipo", "Monto", "Estado", "Fecha"];
+    const rows = history.map((h) => [
+      h.id,
+      h.text,
+      h.type || "general",
+      h.amount?.toString() || "0",
+      h.status || "success",
+      h.createdAt,
+    ]);
+    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historial-svp-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-6">
-      {/* Header con modo simulacion */}
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Sistema de Votos y Puntos</h2>
           <p className="text-sm text-slate-600">MVP conectado para integracion con aplicaciones externas</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className={`rounded-full px-3 py-1.5 text-xs font-semibold ${simulationMode ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
-            {simulationMode ? "Modo Simulacion Activo" : "Modo Normal"}
-          </div>
-          <button
-            type="button"
-            onClick={() => setSimulationMode(!simulationMode)}
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-              simulationMode 
-                ? "bg-amber-600 text-white hover:bg-amber-700" 
-                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            {simulationMode ? <Pause size={16} /> : <Play size={16} />}
-            {simulationMode ? "Detener" : "Iniciar Simulacion"}
-          </button>
-        </div>
       </div>
 
-      {/* Metricas principales */}
+      {/* Metricas principales con Health API y Modo Simulacion */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="inline-flex items-center gap-2 text-sm text-slate-500"><Vote size={16} /> Votos de hoy</p>
@@ -145,14 +191,30 @@ export default function SPVSystem() {
           <p className="text-2xl font-bold">{totalPointsAccumulated.toLocaleString("es-ES")}</p>
           <p className="mt-2 text-xs text-slate-500">Total acumulado en el sistema</p>
         </div>
+        
+        {/* Health API con boton de simulacion debajo */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="inline-flex items-center gap-2 text-sm text-slate-500"><Activity size={16} /> Health API</p>
           <p className={`text-sm font-semibold ${healthState === "online" ? "text-emerald-600" : healthState === "offline" ? "text-rose-600" : "text-amber-600"}`}>
             {healthState === "online" ? <CheckCircle2 size={14} className="mr-1 inline" /> : healthState === "offline" ? <XCircle size={14} className="mr-1 inline" /> : <Clock size={14} className="mr-1 inline" />}
             {healthLabel}
           </p>
-          <button type="button" onClick={() => void actions.runHealthCheck()} className="mt-2 rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={() => void actions.runHealthCheck()} className="mt-2 w-full rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Verificar
+          </button>
+          
+          {/* Boton de simulacion debajo del Health API */}
+          <button
+            type="button"
+            onClick={() => setSimulationMode(!simulationMode)}
+            className={`mt-2 w-full inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+              simulationMode 
+                ? "bg-amber-600 text-white hover:bg-amber-700" 
+                : "border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+            }`}
+          >
+            {simulationMode ? <Pause size={14} /> : <Play size={14} />}
+            {simulationMode ? "Detener Simulacion" : "Modo Simulacion"}
           </button>
         </div>
       </div>
@@ -178,7 +240,7 @@ export default function SPVSystem() {
         </nav>
       </div>
 
-      {/* Panel de eventos de simulacion (visible cuando modo simulacion activo) */}
+      {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center justify-between">
@@ -186,12 +248,22 @@ export default function SPVSystem() {
               <Activity size={16} /> Eventos de Simulacion en Tiempo Real
             </p>
             <div className="flex gap-2">
+              <select
+                value={selectedIntegration}
+                onChange={(e) => setSelectedIntegration(e.target.value)}
+                className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+              >
+                <option value="inventory">Inventario</option>
+                <option value="ecommerce">E-commerce</option>
+                <option value="crm">CRM</option>
+                <option value="custom">Personalizado</option>
+              </select>
               <button
                 type="button"
                 onClick={simulateExternalEvent}
                 className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
               >
-                <Send size={14} /> Simular Evento Externo
+                <Send size={14} /> Simular Evento
               </button>
               <button
                 type="button"
@@ -202,16 +274,21 @@ export default function SPVSystem() {
               </button>
             </div>
           </div>
-          <div className="mt-3 max-h-32 space-y-1 overflow-y-auto">
+          
+          {/* Consola de eventos */}
+          <div className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg bg-slate-900 p-3 font-mono text-xs">
             {simulationEvents.length === 0 ? (
-              <p className="text-sm text-amber-700">No hay eventos. Realiza acciones en cualquier pestana para ver los eventos simulados.</p>
+              <p className="text-slate-400">Esperando eventos... Realiza acciones para ver la simulacion.</p>
             ) : (
               simulationEvents.map((evt) => (
-                <div key={evt.id} className="flex items-center gap-2 rounded-lg bg-white/50 px-3 py-1.5 text-xs">
-                  <span className={`inline-block h-2 w-2 rounded-full ${evt.status === "success" ? "bg-emerald-500" : evt.status === "error" ? "bg-rose-500" : "bg-amber-500"}`} />
-                  <span className="text-slate-500">{evt.timestamp}</span>
-                  <span className="font-medium text-slate-700">{evt.description}</span>
-                  {evt.details && <span className="text-slate-500">- {evt.details}</span>}
+                <div key={evt.id} className="flex items-start gap-2 text-slate-300">
+                  <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${evt.status === "success" ? "bg-emerald-400" : evt.status === "error" ? "bg-rose-400" : "bg-amber-400"}`} />
+                  <span className="text-slate-500">[{evt.timestamp}]</span>
+                  <span className={`${evt.status === "success" ? "text-emerald-400" : evt.status === "error" ? "text-rose-400" : "text-amber-400"}`}>
+                    {evt.type.toUpperCase()}
+                  </span>
+                  <span className="text-white">{evt.description}</span>
+                  {evt.details && <span className="text-slate-400">- {evt.details}</span>}
                 </div>
               ))
             )}
@@ -222,21 +299,123 @@ export default function SPVSystem() {
       {/* Contenido de pestana: Actividades */}
       {activeTab === "activities" && (
         <div className="mt-5">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-bold text-slate-900">Actividades Disponibles</h3>
-            <p className="text-sm text-slate-500">{[...groupedActivities.global, ...groupedActivities.local].length} actividades</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">{activities.length} actividades</span>
+              <button
+                type="button"
+                onClick={() => setShowCreateActivity(!showCreateActivity)}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                <Plus size={14} /> Nueva
+              </button>
+            </div>
           </div>
+
+          {/* Formulario crear actividad */}
+          {showCreateActivity && (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="mb-3 text-sm font-semibold text-blue-900">Crear Nueva Actividad</p>
+              <div className="flex flex-wrap gap-3">
+                <input
+                  value={newActivityName}
+                  onChange={(e) => setNewActivityName(e.target.value)}
+                  placeholder="Nombre de actividad"
+                  className="flex-1 rounded-lg border border-blue-300 px-3 py-2 text-sm"
+                />
+                <select
+                  value={newActivityType}
+                  onChange={(e) => setNewActivityType(e.target.value as "global" | "local")}
+                  className="rounded-lg border border-blue-300 px-3 py-2 text-sm"
+                >
+                  <option value="local">Local</option>
+                  <option value="global">Global</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newActivityName.trim()) {
+                      void actions.handleCreateActivity(newActivityName, newActivityType, `Actividad ${newActivityType}`);
+                      setNewActivityName("");
+                      setShowCreateActivity(false);
+                      if (simulationMode) {
+                        addSimulationEvent({ type: "system", description: `Actividad "${newActivityName}" creada`, status: "success" });
+                      }
+                    }
+                  }}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Crear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateActivity(false)}
+                  className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[...groupedActivities.global, ...groupedActivities.local].map((activity) => (
+            {activities.map((activity) => (
               <article key={activity.id} className="group rounded-2xl border border-slate-200 bg-white p-5 transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${activity.type === "global" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
                     {activity.type}
                   </span>
-                  <span className="text-xs text-slate-400">ID: {activity.id}</span>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => setEditingActivity(editingActivity === activity.id ? null : activity.id)}
+                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void actions.handleDeleteActivity(activity.id);
+                        if (simulationMode) {
+                          addSimulationEvent({ type: "system", description: `Actividad "${activity.name}" eliminada`, status: "success" });
+                        }
+                      }}
+                      className="rounded p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-600"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <h4 className="mt-2 text-lg font-bold text-slate-900">{activity.name}</h4>
-                <p className="mt-1 text-sm text-slate-600">{activity.context}</p>
+                
+                {editingActivity === activity.id ? (
+                  <div className="mt-2 space-y-2">
+                    <input
+                      defaultValue={activity.name}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      onBlur={(e) => {
+                        if (e.target.value !== activity.name) {
+                          void actions.handleUpdateActivity(activity.id, { name: e.target.value });
+                          if (simulationMode) {
+                            addSimulationEvent({ type: "system", description: `Actividad actualizada: "${e.target.value}"`, status: "success" });
+                          }
+                        }
+                        setEditingActivity(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        if (e.key === "Escape") setEditingActivity(null);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <h4 className="mt-2 text-lg font-bold text-slate-900">{activity.name}</h4>
+                    <p className="mt-1 text-sm text-slate-600">{activity.context}</p>
+                  </>
+                )}
+                
                 <div className="mt-3 flex items-center gap-4 text-sm">
                   <span className="inline-flex items-center gap-1 text-slate-700">
                     <TrendingUp size={14} /> {activity.pointsPerHour.toFixed(2)} pts/h
@@ -264,16 +443,49 @@ export default function SPVSystem() {
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-slate-200 bg-white p-6">
             <h3 className="text-lg font-bold text-slate-900">Transferir Puntos</h3>
-            <p className="mt-1 text-sm text-slate-500">Envia puntos a otro usuario del sistema</p>
+            <p className="mt-1 text-sm text-slate-500">Envia puntos a usuarios registrados</p>
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700">Destinatario</label>
-                <input
-                  value={receiver}
-                  onChange={(event) => actions.setReceiver(event.target.value)}
-                  placeholder="@usuario o ID"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+                <div className="relative mt-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={userFilter}
+                    onChange={(event) => {
+                      setUserFilter(event.target.value);
+                      setReceiver(event.target.value);
+                    }}
+                    placeholder="Buscar usuario..."
+                    className="w-full rounded-lg border border-slate-300 pl-9 pr-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                
+                {/* Lista de usuarios filtrados */}
+                {userFilter && filteredUsers.length > 0 && (
+                  <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    {filteredUsers.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => {
+                          setReceiver(user.username);
+                          setUserFilter("");
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <div>
+                          <span className="font-medium text-slate-900">@{user.username}</span>
+                          <span className="ml-2 text-slate-500">{user.displayName}</span>
+                        </div>
+                        <span className="text-xs text-slate-400">{user.pointsBalance} pts</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                {receiver && !userFilter && (
+                  <p className="mt-1 text-xs text-emerald-600">Destinatario seleccionado: @{receiver}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Cantidad</label>
@@ -297,7 +509,12 @@ export default function SPVSystem() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void actions.handleReceive()}
+                  onClick={() => {
+                    void actions.handleReceive();
+                    if (simulationMode) {
+                      addSimulationEvent({ type: "credit", description: "Puntos recibidos", status: "success", details: "+8 pts" });
+                    }
+                  }}
                   className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   <Download size={16} className="mr-2 inline" /> Recibir
@@ -325,36 +542,21 @@ export default function SPVSystem() {
               </div>
             </div>
 
-            {simulationMode && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-900">Integracion Externa</p>
-                <p className="mt-1 text-xs text-amber-700">Selecciona una app para simular eventos de puntos</p>
-                <select
-                  value={selectedIntegration}
-                  onChange={(e) => setSelectedIntegration(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="inventory">Sistema de Inventario</option>
-                  <option value="ecommerce">E-commerce</option>
-                  <option value="crm">CRM</option>
-                  <option value="custom">App Personalizada</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    addSimulationEvent({
-                      type: "integration",
-                      description: `Evento de ${selectedIntegration} recibido`,
-                      status: "success",
-                      details: "Puntos sincronizados correctamente",
-                    });
-                  }}
-                  className="mt-2 w-full rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-                >
-                  Simular Evento de {selectedIntegration}
-                </button>
+            {/* Usuarios registrados */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-900">Usuarios Registrados</p>
+                <span className="text-xs text-slate-500">{registeredUsers.length} usuarios</span>
               </div>
-            )}
+              <div className="mt-3 max-h-32 space-y-1 overflow-y-auto">
+                {registeredUsers.slice(0, 5).map((user) => (
+                  <div key={user.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                    <span className="font-medium text-slate-700">@{user.username}</span>
+                    <span className="text-slate-500">{user.pointsBalance} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </section>
         </div>
       )}
@@ -362,63 +564,188 @@ export default function SPVSystem() {
       {/* Contenido de pestana: Historial */}
       {activeTab === "history" && (
         <div className="mt-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-bold text-slate-900">Historial de Transacciones</h3>
-            <div className="flex gap-2">
-              <button type="button" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                Exportar CSV
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value)}
+                  placeholder="Filtrar..."
+                  className="rounded-lg border border-slate-300 pl-9 pr-4 py-1.5 text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDataTable(!showDataTable)}
+                className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium ${showDataTable ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-300 bg-white text-slate-600"}`}
+              >
+                <Table size={14} /> Tabla
               </button>
-              <button type="button" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                Filtrar
+              <button type="button" onClick={exportHistoryCSV} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                <Download size={14} className="mr-1 inline" /> CSV
               </button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-4 py-3">
-              <div className="grid grid-cols-12 gap-4 text-xs font-medium uppercase text-slate-500">
-                <span className="col-span-1">Estado</span>
-                <span className="col-span-5">Descripcion</span>
-                <span className="col-span-2">Tipo</span>
-                <span className="col-span-2">Monto</span>
-                <span className="col-span-2">Fecha</span>
+          {/* Vista tabla de datos */}
+          {showDataTable && (
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Estado</th>
+                      <th className="px-4 py-3">Descripcion</th>
+                      <th className="px-4 py-3">Tipo</th>
+                      <th className="px-4 py-3">Monto</th>
+                      <th className="px-4 py-3">Fecha</th>
+                      <th className="px-4 py-3">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                          No hay transacciones registradas.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredHistory.map((entry) => (
+                        <tr key={entry.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3">
+                            <CheckCircle2 size={16} className="text-emerald-500" />
+                          </td>
+                          <td className="px-4 py-3">
+                            {editingHistoryId === entry.id ? (
+                              <input
+                                defaultValue={entry.text}
+                                className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                                autoFocus
+                                onBlur={(e) => {
+                                  actions.handleUpdateHistoryEntry(entry.id, e.target.value);
+                                  setEditingHistoryId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                  if (e.key === "Escape") setEditingHistoryId(null);
+                                }}
+                              />
+                            ) : (
+                              <span className="text-slate-700">{entry.text}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                              entry.type === "vote" ? "bg-blue-100 text-blue-700" : 
+                              entry.type === "transfer" ? "bg-amber-100 text-amber-700" : 
+                              "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {entry.type || "general"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-700">
+                            {entry.amount ? `${entry.amount} pts` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500">{entry.createdAt}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingHistoryId(entry.id)}
+                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => actions.handleDeleteHistoryEntry(entry.id)}
+                                className="rounded p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-600"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="divide-y divide-slate-100">
-              {history.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-slate-500">
-                  No hay transacciones registradas. Realiza votos o transferencias para ver el historial.
-                </div>
-              ) : (
-                history.map((entry) => (
-                  <div key={entry.id} className="grid grid-cols-12 items-center gap-4 px-4 py-3 text-sm hover:bg-slate-50">
-                    <span className="col-span-1">
-                      <CheckCircle2 size={16} className="text-emerald-500" />
-                    </span>
-                    <span className="col-span-5 text-slate-700">{entry.text}</span>
-                    <span className="col-span-2">
-                      <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                        {entry.text.includes("voto") ? "Voto" : entry.text.includes("transf") ? "Transferencia" : "Credito"}
-                      </span>
-                    </span>
-                    <span className="col-span-2 font-medium text-slate-700">
-                      {entry.text.match(/\d+/)?.[0] || "-"} pts
-                    </span>
-                    <span className="col-span-2 text-slate-500">{entry.createdAt}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          )}
 
+          {/* Vista lista (default) */}
+          {!showDataTable && (
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <div className="divide-y divide-slate-100">
+                {filteredHistory.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                    No hay transacciones. Realiza votos o transferencias para ver el historial.
+                  </div>
+                ) : (
+                  filteredHistory.map((entry) => (
+                    <div key={entry.id} className="group flex items-center justify-between px-4 py-3 hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 size={16} className="text-emerald-500" />
+                        <div>
+                          <p className="text-sm text-slate-700">{entry.text}</p>
+                          <p className="text-xs text-slate-400">{entry.createdAt}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                          entry.type === "vote" ? "bg-blue-100 text-blue-700" : 
+                          entry.type === "transfer" ? "bg-amber-100 text-amber-700" : 
+                          "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {entry.amount ? `${entry.amount} pts` : entry.type || "general"}
+                        </span>
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => setEditingHistoryId(entry.id)}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => actions.handleDeleteHistoryEntry(entry.id)}
+                            className="rounded p-1 text-slate-400 hover:bg-rose-100 hover:text-rose-600"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Consola de eventos de simulacion en historial */}
           {simulationMode && simulationEvents.length > 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <h4 className="text-sm font-semibold text-amber-900">Eventos Simulados</h4>
-              <div className="mt-2 space-y-1">
-                {simulationEvents.slice(0, 5).map((evt) => (
-                  <div key={evt.id} className="flex items-center gap-2 text-xs text-amber-800">
-                    <span className={`h-1.5 w-1.5 rounded-full ${evt.status === "success" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                    <span>{evt.timestamp}</span>
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
+                  <Activity size={16} /> Eventos de Simulacion
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSimulationEvents([])}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Limpiar
+                </button>
+              </div>
+              <div className="max-h-32 space-y-1 overflow-y-auto font-mono text-xs">
+                {simulationEvents.slice(0, 10).map((evt) => (
+                  <div key={evt.id} className="flex items-center gap-2 text-slate-300">
+                    <span className={`h-1.5 w-1.5 rounded-full ${evt.status === "success" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                    <span className="text-slate-500">{evt.timestamp}</span>
                     <span>{evt.description}</span>
                   </div>
                 ))}
@@ -432,19 +759,19 @@ export default function SPVSystem() {
       {activeTab === "operations" && (
         <section className="mt-5 space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <Settings size={18} /> Centro de Operaciones
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
-                  Herramientas avanzadas para monitoreo, pruebas de carga, gestion de errores y conciliacion.
+                  Herramientas avanzadas para monitoreo, pruebas de carga y conciliacion.
                 </p>
               </div>
               {!simulationMode && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                   <AlertTriangle size={16} className="text-amber-600" />
-                  <span className="text-xs text-amber-700">Activa el modo simulacion para probar estas herramientas</span>
+                  <span className="text-xs text-amber-700">Activa el modo simulacion para probar</span>
                 </div>
               )}
             </div>
