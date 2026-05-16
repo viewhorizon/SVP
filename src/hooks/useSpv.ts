@@ -209,20 +209,12 @@ export function useSpv() {
     setHealthState("checking");
     setHealthLabel("Verificando...");
     try {
-      // Primero intentar Neon
+      // Intentar conectar al backend (que tiene acceso a Neon)
       const neonHealth = await neonClient.checkNeonHealth();
       if (neonHealth.ok) {
         setHealthState("online");
-        setHealthLabel("Disponible (Neon)");
-        setUseNeon(true);
-        return;
-      }
-
-      // Luego intentar API backend
-      const health = await checkApiHealth();
-      if (health.ok) {
-        setHealthState("online");
         setHealthLabel("Disponible");
+        setUseNeon(true);
         return;
       }
       setHealthState("offline");

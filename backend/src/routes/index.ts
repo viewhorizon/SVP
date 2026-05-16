@@ -14,6 +14,8 @@ import { createDeadLetterRouter } from './deadLetter.routes';
 import { createAlertsRouter } from './alerts.routes';
 import { createLoadTestRouter } from './loadTest.routes';
 import { createReconciliationRouter } from './reconciliation.routes';
+// MVP routes
+import { createSpvMvpRouter } from './spvMvp.routes';
 
 export function registerApiRoutes(app: Express, pool: Pool) {
   const routeFactories = [
@@ -31,6 +33,8 @@ export function registerApiRoutes(app: Express, pool: Pool) {
     () => createAlertsRouter({ pool }),
     () => createLoadTestRouter(),
     () => createReconciliationRouter({ pool }),
+    // MVP
+    () => createSpvMvpRouter({ pool }),
   ];
 
   // Keep /api for compatibility and expose /api/v1 as a stable integration contract.
