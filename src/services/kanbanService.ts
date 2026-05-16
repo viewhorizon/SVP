@@ -74,6 +74,186 @@ export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string; isSt
 ];
 
 export const DEFAULT_TASKS: Task[] = [
+  // ========== BACKLOG ESTRATEGICO DE TESTING MVP ==========
+  {
+    id: "test-mvp-00",
+    title: "Testing MVP: Sistema de Votos y Puntos",
+    description: "Backlog estrategico que despliega todas las fases de testing del prototipo MVP. Cuando todas las subtareas esten completadas, el prototipo estara validado para produccion.",
+    category: "testing",
+    priority: "high",
+    estimated: "40h",
+    status: "backlog",
+    isStrategic: true,
+    childTaskIds: ["test-mvp-01", "test-mvp-02", "test-mvp-03", "test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07", "test-mvp-08"],
+    acceptanceCriteria: [
+      "100% de subtareas completadas exitosamente",
+      "Todas las operaciones CRUD funcionan correctamente",
+      "Integracion con BD Neon validada",
+      "UI responsive y funcional en todas las pestanas",
+      "Consola de eventos sin duplicados ni errores"
+    ],
+    dependencies: [],
+    risks: ["Dependencia de conexion a Neon", "Datos de prueba insuficientes"]
+  },
+  // Fase 1: Infraestructura BD
+  {
+    id: "test-mvp-01",
+    title: "Crear tablas MVP en Neon",
+    description: "Ejecutar migracion para crear tablas: spv_users, spv_activities, spv_transactions, spv_history",
+    category: "database",
+    priority: "high",
+    estimated: "2h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Tabla spv_users creada con campos: id, username, name, email, points_balance",
+      "Tabla spv_activities creada con campos: id, name, type, votes_count, points_reward",
+      "Tabla spv_transactions creada con campos: id, from_user, to_user, amount, type, status",
+      "Tabla spv_history creada con campos: id, user_id, description, type, amount, status, created_at"
+    ],
+    dependencies: [],
+    risks: ["Conexion a Neon fallida"]
+  },
+  // Fase 2: Seed Data
+  {
+    id: "test-mvp-02",
+    title: "Poblar datos de prueba iniciales",
+    description: "Insertar usuarios de prueba, actividades y transacciones iniciales para testing",
+    category: "database",
+    priority: "high",
+    estimated: "1h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "5 usuarios de prueba con balances variados",
+      "10 actividades de diferentes tipos (global/local)",
+      "20 transacciones historicas de ejemplo"
+    ],
+    dependencies: ["test-mvp-01"],
+    risks: []
+  },
+  // Fase 3: API Endpoints
+  {
+    id: "test-mvp-03",
+    title: "Conectar API Routes con Neon",
+    description: "Crear endpoints /api/spv/* que lean y escriban a las tablas de Neon",
+    category: "backend",
+    priority: "high",
+    estimated: "4h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "GET /api/spv/users retorna lista de usuarios",
+      "GET /api/spv/activities retorna actividades",
+      "GET /api/spv/history retorna historial",
+      "POST /api/spv/vote registra voto y actualiza puntos",
+      "POST /api/spv/transfer registra transferencia"
+    ],
+    dependencies: ["test-mvp-01", "test-mvp-02"],
+    risks: ["CORS issues", "Timeout en queries"]
+  },
+  // Fase 4: UI Actividades
+  {
+    id: "test-mvp-04",
+    title: "Test pestana Actividades",
+    description: "Validar CRUD completo de actividades: crear, votar, editar, eliminar",
+    category: "testing",
+    priority: "high",
+    estimated: "3h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Boton Nueva Actividad crea actividad en BD",
+      "Boton Votar incrementa votos y otorga puntos",
+      "Editar actividad actualiza nombre en BD",
+      "Eliminar actividad la remueve de BD",
+      "Lista se actualiza sin recargar pagina"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: []
+  },
+  // Fase 5: UI Puntos
+  {
+    id: "test-mvp-05",
+    title: "Test pestana Puntos",
+    description: "Validar transferencias entre usuarios con autocomplete funcional",
+    category: "testing",
+    priority: "high",
+    estimated: "3h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Dropdown muestra usuarios de BD filtrados",
+      "Click en usuario autocompleta el campo",
+      "Boton Transferir deduce puntos del emisor",
+      "Boton Transferir acredita puntos al receptor",
+      "Balance se actualiza en tiempo real"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: ["Usuario sin puntos suficientes"]
+  },
+  // Fase 6: UI Historial
+  {
+    id: "test-mvp-06",
+    title: "Test pestana Historial",
+    description: "Validar carga desde BD y localStorage, edicion y eliminacion",
+    category: "testing",
+    priority: "medium",
+    estimated: "2h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Historial carga desde BD al iniciar",
+      "Fallback a localStorage si BD no disponible",
+      "Vista tabla muestra todas las columnas",
+      "Editar entrada actualiza descripcion",
+      "Eliminar entrada la remueve de BD",
+      "Exportar CSV descarga archivo correcto"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: []
+  },
+  // Fase 7: UI Operaciones
+  {
+    id: "test-mvp-07",
+    title: "Test pestana Operaciones",
+    description: "Validar paneles de dead-letter, alertas, load test y reconciliacion",
+    category: "testing",
+    priority: "medium",
+    estimated: "4h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Dead Letter Panel muestra eventos simulados",
+      "Boton Replay reintenta evento correctamente",
+      "Alertas Panel muestra alertas de sistema",
+      "Load Test ejecuta y muestra metricas",
+      "Reconciliacion muestra validaciones"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: ["Datos simulados insuficientes"]
+  },
+  // Fase 8: Integracion Final
+  {
+    id: "test-mvp-08",
+    title: "Validacion E2E del MVP",
+    description: "Test completo del flujo: crear actividad -> votar -> recibir puntos -> transferir -> ver historial",
+    category: "testing",
+    priority: "high",
+    estimated: "3h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Flujo completo sin errores en consola",
+      "Datos persisten al recargar pagina",
+      "Consola de eventos muestra todos los pasos",
+      "Health API muestra Disponible",
+      "Sin duplicados en eventos"
+    ],
+    dependencies: ["test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07"],
+    risks: ["Regresiones en fases anteriores"]
+  },
+  // ========== TAREAS EXISTENTES ==========
   { id: "k-01", title: "Alcance definido: SVP + Inventario + Actividades + LiveOps + Unity", description: "Definir el alcance completo del sistema SPV integrado con Inventario y Parque 3D", category: "planning", priority: "high", estimated: "8h", status: "done" },
   { id: "k-02", title: "PostgreSQL confirmado como fuente de verdad", description: "Confirmar y documentar PostgreSQL como base de datos principal para puntos", category: "database", priority: "high", estimated: "4h", status: "done" },
   { id: "k-03", title: "Prototipo UI HTML creado", description: "Crear prototipo HTML inicial del sistema SPV con votes, puntos e inventario", category: "frontend", priority: "high", estimated: "6h", status: "done" },

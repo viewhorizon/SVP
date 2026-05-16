@@ -16,6 +16,7 @@ import {
   type Transaction 
 } from "../services/spvApi";
 import { getLastRequestTelemetry } from "../services/httpClient";
+import * as neonClient from "../services/neonClient";
 
 type ActivityItem = {
   id: string;
@@ -38,6 +39,7 @@ type HistoryEntry = {
 const DEMO_USER_ID = "11111111-1111-1111-1111-111111111111";
 const MAX_DAILY_VOTES = 5;
 const MAX_AVAILABLE_POINTS = 100;
+const HISTORY_STORAGE_KEY = "spv.history.v1";
 
 const INITIAL_ACTIVITIES: ActivityItem[] = [
   { id: "act-global-001", name: "Peluquerias", type: "global", pointsPerHour: 1.03, votes: 50234, context: "Actividad global" },
@@ -54,6 +56,28 @@ const formatDate = () =>
     day: "2-digit",
     month: "2-digit",
   });
+
+// Load history from localStorage
+const loadHistoryFromStorage = (): HistoryEntry[] => {
+  try {
+    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    console.log("[v0] Error loading history from localStorage");
+  }
+  return [];
+};
+
+// Save history to localStorage
+const saveHistoryToStorage = (history: HistoryEntry[]) => {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    console.log("[v0] Error saving history to localStorage");
+  }
+};
 
 export function useSpv() {
   const [dailyVotesLeft, setDailyVotesLeft] = useState(MAX_DAILY_VOTES);
@@ -72,6 +96,7 @@ export function useSpv() {
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [useNeon, setUseNeon] = useState(false);
 
   useEffect(() => {
     try {
@@ -83,16 +108,78 @@ export function useSpv() {
     }
   }, []);
 
+  // Cargar historial desde localStorage al inicio
   useEffect(() => {
-    setHistory([
-      { id: buildId(), text: "@carlos -> tu (+5 pts)", createdAt: formatDate(), type: "transfer", status: "success", amount: 5 },
-      { id: buildId(), text: "Voto global en Peluquerias", createdAt: formatDate(), type: "vote", status: "success", amount: 2 },
-    ]);
+    const storedHistory = loadHistoryFromStorage();
+    if (storedHistory.length > 0) {
+      setHistory(storedHistory);
+    }
   }, []);
 
+  // Guardar historial en localStorage cuando cambie
   useEffect(() => {
-    const load = async () => {
+    if (history.length > 0) {
+      saveHistoryToStorage(history);
+    }
+  }, [history]);
+
+  // Cargar datos iniciales (usuarios, actividades)
+  useEffect(() => {
+    const loadData = async () => {
       setIsLoading(true);
+      try {
+        // Intentar cargar desde Neon primero
+        const [neonUsers, neonActivities, neonHistory] = await Promise.all([
+          neonClient.fetchUsers(),
+          neonClient.fetchActivities(),
+          neonClient.fetchHistory(),
+        ]);
+
+        if (neonUsers.length > 0) {
+          setUseNeon(true);
+          // Convertir usuarios de Neon al formato User
+          setRegisteredUsers(neonUsers.map(u => ({
+            id: u.id,
+            username: u.username,
+            displayName: u.name,
+            pointsBalance: u.points_balance,
+          })));
+
+          // Convertir actividades de Neon al formato ActivityItem
+          if (neonActivities.length > 0) {
+            setActivities(neonActivities.map(a => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              pointsPerHour: a.points_reward / 10,
+              votes: a.votes_count,
+              context: a.type === "global" ? "Actividad global" : "Actividad local",
+            })));
+          }
+
+          // Cargar historial desde Neon si hay datos, sino desde localStorage
+          if (neonHistory.length > 0) {
+            setHistory(neonHistory.map(h => ({
+              id: h.id,
+              text: h.description,
+              createdAt: new Date(h.created_at).toLocaleString("es-ES", {
+                hour: "2-digit",
+                minute: "2-digit",
+                day: "2-digit",
+                month: "2-digit",
+              }),
+              type: h.type as "vote" | "transfer" | "credit",
+              status: h.status as "success" | "pending" | "error",
+              amount: h.amount,
+            })));
+          }
+          return;
+        }
+      } catch (err) {
+        console.log("[v0] Neon not available, using fallback:", err);
+      }
+
+      // Fallback: cargar desde API o usar mock
       try {
         const [bootstrap, users] = await Promise.all([
           getSpvBootstrapState(DEMO_USER_ID),
@@ -115,26 +202,34 @@ export function useSpv() {
         setIsLoading(false);
       }
     };
-    void load();
+    void loadData();
   }, []);
 
   const runHealthCheck = useCallback(async () => {
     setHealthState("checking");
-    setHealthLabel("Verificando API...");
+    setHealthLabel("Verificando...");
     try {
+      // Primero intentar Neon
+      const neonHealth = await neonClient.checkNeonHealth();
+      if (neonHealth.ok) {
+        setHealthState("online");
+        setHealthLabel("Disponible (Neon)");
+        setUseNeon(true);
+        return;
+      }
+
+      // Luego intentar API backend
       const health = await checkApiHealth();
       if (health.ok) {
         setHealthState("online");
-        setHealthLabel(`Disponible`);
-        console.log("[v0] Health check successful:", health.service ?? "spv-api");
+        setHealthLabel("Disponible");
         return;
       }
       setHealthState("offline");
       setHealthLabel("Offline");
-    } catch (err) {
+    } catch {
       setHealthState("offline");
       setHealthLabel("Offline");
-      console.log("[v0] Health check failed:", err);
     }
   }, []);
 
