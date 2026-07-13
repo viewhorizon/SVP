@@ -25,6 +25,7 @@ type ActivityItem = {
   pointsPerHour: number;
   votes: number;
   context: string;
+  linkedTaskId?: string | null;
 };
 
 type HistoryEntry = {
@@ -98,6 +99,13 @@ export function useSpv() {
   const [isLoading, setIsLoading] = useState(false);
   const [useNeon, setUseNeon] = useState(false);
 
+  // Trazabilidad: items estrategicos, tareas y notificaciones de impacto
+  const [strategicItems, setStrategicItems] = useState<neonClient.NeonStrategicItem[]>([]);
+  const [tasks, setTasks] = useState<neonClient.NeonTask[]>([]);
+  const [impactNotifications, setImpactNotifications] = useState<
+    (neonClient.VoteImpact & { id: string })[]
+  >([]);
+
   useEffect(() => {
     try {
       if (!localStorage.getItem("auth.token")) {
@@ -145,7 +153,15 @@ export function useSpv() {
             pointsBalance: u.points_balance,
           })));
 
-          // Convertir actividades de Neon al formato ActivityItem
+          // Cargar trazabilidad: items estrategicos y tareas
+          const [neonStrategic, neonTasks] = await Promise.all([
+            neonClient.fetchStrategicItems(),
+            neonClient.fetchTasks(),
+          ]);
+          setStrategicItems(neonStrategic);
+          setTasks(neonTasks);
+
+          // Convertir actividades de Neon al formato ActivityItem (preserva linked_task_id)
           if (neonActivities.length > 0) {
             setActivities(neonActivities.map(a => ({
               id: a.id,
@@ -154,6 +170,7 @@ export function useSpv() {
               pointsPerHour: a.points_reward / 10,
               votes: a.votes_count,
               context: a.type === "global" ? "Actividad global" : "Actividad local",
+              linkedTaskId: a.linked_task_id ?? null,
             })));
           }
 
@@ -260,6 +277,37 @@ export function useSpv() {
     ].slice(0, 50));
   }, []);
 
+  // Aplicar el impacto de trazabilidad en el estado local (tarea + estrategico)
+  const applyImpact = useCallback((impact: neonClient.VoteImpact) => {
+    // Actualizar la tarea afectada
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === impact.taskId
+          ? { ...t, progress: impact.taskProgress, status: impact.taskStatus }
+          : t,
+      ),
+    );
+    // Actualizar el item estrategico afectado
+    if (impact.strategicId && impact.strategicProgress !== null) {
+      setStrategicItems((prev) =>
+        prev.map((s) =>
+          s.id === impact.strategicId
+            ? { ...s, progress: impact.strategicProgress as number, computed_progress: impact.strategicProgress as number }
+            : s,
+        ),
+      );
+    }
+    // Emitir notificacion de impacto (auto-expira via el componente)
+    const notif = { ...impact, id: buildId() };
+    setImpactNotifications((prev) => [notif, ...prev].slice(0, 4));
+    // Emitir evento global para que el Kanban pueda refrescar
+    window.dispatchEvent(new CustomEvent("spv:impact", { detail: impact }));
+  }, []);
+
+  const dismissImpact = useCallback((id: string) => {
+    setImpactNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   // CREATE - Votar
   const handleVote = useCallback(async (activityId: string) => {
     if (dailyVotesLeft <= 0) {
@@ -269,6 +317,30 @@ export function useSpv() {
     const activity = activities.find((entry) => entry.id === activityId);
     if (!activity) return;
 
+    // Camino Neon: captura impacto de trazabilidad
+    if (useNeon) {
+      try {
+        const result = await neonClient.castVote(activityId, DEMO_USER_ID);
+        if (result.success) {
+          setDailyVotesLeft((prev) => prev - 1);
+          setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
+          setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
+          setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
+          addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`, "vote", result.pointsGranted);
+          if (result.impact) {
+            applyImpact(result.impact);
+            setMessage(`Voto registrado. Tarea "${result.impact.taskTitle}" avanzo a ${result.impact.taskProgress}%.`);
+          } else {
+            setMessage("Voto registrado.");
+          }
+          return;
+        }
+      } catch (err) {
+        console.log("[v0] Neon vote failed, fallback local:", err);
+      }
+    }
+
+    // Camino API/local original
     try {
       const result = await castVote(activityId, buildId());
       setDailyVotesLeft(result.remainingVotes);
@@ -286,7 +358,7 @@ export function useSpv() {
       addHistory(`Voto ${activity.type} en ${activity.name} (+${localPoints} pts)`, "vote", localPoints);
       setMessage("Voto registrado en modo local.");
     }
-  }, [dailyVotesLeft, activities, addHistory]);
+  }, [dailyVotesLeft, activities, addHistory, useNeon, applyImpact]);
 
   // CREATE - Transferir
   const handleTransfer = useCallback(async () => {
@@ -400,6 +472,11 @@ export function useSpv() {
       registeredUsers,
       transactions,
       isLoading,
+      useNeon,
+      // Trazabilidad
+      strategicItems,
+      tasks,
+      impactNotifications,
     },
     actions: {
       // READ implícito en bootstrap
@@ -416,6 +493,8 @@ export function useSpv() {
       handleUpdateHistoryEntry,
       handleDeleteHistoryEntry,
       clearMessage,
+      // Trazabilidad
+      dismissImpact,
     },
   };
 }

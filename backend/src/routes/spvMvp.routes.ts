@@ -17,16 +17,51 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
     }
   });
 
-  // GET /spv/activities - Lista todas las actividades
+  // GET /spv/activities - Lista todas las actividades (incluye vinculo a tarea)
   router.get('/spv/activities', async (_req, res) => {
     try {
       const result = await pool.query(
-        'SELECT id, name, description, type, votes_count, points_reward, is_active, created_at FROM spv_activities WHERE is_active = true ORDER BY votes_count DESC'
+        'SELECT id, name, description, type, votes_count, points_reward, is_active, linked_task_id, slug, created_at FROM spv_activities WHERE is_active = true ORDER BY votes_count DESC'
       );
       res.json({ ok: true, data: result.rows });
     } catch (err) {
       console.error('[spvMvp] Error fetching activities:', err);
       res.status(500).json({ ok: false, error: 'Error fetching activities' });
+    }
+  });
+
+  // GET /spv/strategic - Lista items estrategicos con progreso calculado
+  router.get('/spv/strategic', async (_req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT s.id, s.title, s.description, s.progress,
+          COALESCE(AVG(t.progress), 0)::int AS computed_progress,
+          COUNT(t.id)::int AS total_tasks,
+          COUNT(t.id) FILTER (WHERE t.status = 'done')::int AS done_tasks
+        FROM spv_strategic_items s
+        LEFT JOIN spv_tasks t ON t.strategic_item_id = s.id
+        GROUP BY s.id, s.title, s.description, s.progress
+        ORDER BY s.id`
+      );
+      res.json({ ok: true, data: result.rows });
+    } catch (err) {
+      console.error('[spvMvp] Error fetching strategic items:', err);
+      res.status(500).json({ ok: false, error: 'Error fetching strategic items' });
+    }
+  });
+
+  // GET /spv/tasks - Lista tareas con criterios, riesgo y dependencias
+  router.get('/spv/tasks', async (_req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, title, description, status, progress, strategic_item_id,
+          acceptance_criteria, completed_criteria, risk, dependencies, updated_at
+        FROM spv_tasks ORDER BY id`
+      );
+      res.json({ ok: true, data: result.rows });
+    } catch (err) {
+      console.error('[spvMvp] Error fetching tasks:', err);
+      res.status(500).json({ ok: false, error: 'Error fetching tasks' });
     }
   });
 
@@ -43,34 +78,106 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
     }
   });
 
-  // POST /spv/vote - Registrar un voto
+  // POST /spv/vote - Registrar un voto y propagar progreso (trazabilidad)
   router.post('/spv/vote', async (req, res) => {
     const { activityId, userId, points } = req.body;
+    const client = await pool.connect();
     try {
-      // Incrementar votos en la actividad
-      await pool.query(
-        'UPDATE spv_activities SET votes_count = votes_count + 1, updated_at = NOW() WHERE id = $1',
+      await client.query('BEGIN');
+
+      // Incrementar votos en la actividad y obtener su tarea vinculada
+      const activityResult = await client.query(
+        'UPDATE spv_activities SET votes_count = votes_count + 1, updated_at = NOW() WHERE id = $1 RETURNING name, linked_task_id',
         [activityId]
       );
+      const activity = activityResult.rows[0];
+      const linkedTaskId: string | null = activity?.linked_task_id ?? null;
 
       // Agregar puntos al usuario si existe
       if (userId) {
-        await pool.query(
+        await client.query(
           'UPDATE spv_users SET points_balance = points_balance + $1, updated_at = NOW() WHERE id = $2',
           [points || 10, userId]
         );
       }
 
       // Registrar en historial
-      await pool.query(
+      await client.query(
         'INSERT INTO spv_history (user_id, description, type, amount, status) VALUES ($1, $2, $3, $4, $5)',
-        [userId, `Voto en actividad`, 'vote', points || 10, 'success']
+        [userId, `Voto en ${activity?.name ?? 'actividad'}`, 'vote', points || 10, 'success']
       );
 
-      res.json({ ok: true, message: 'Voto registrado' });
+      // === TRAZABILIDAD: propagar progreso a la tarea vinculada ===
+      let impact: null | {
+        taskId: string;
+        taskTitle: string;
+        taskProgress: number;
+        taskStatus: string;
+        strategicId: string | null;
+        strategicTitle: string | null;
+        strategicProgress: number | null;
+      } = null;
+
+      if (linkedTaskId) {
+        // Cada voto suma 10% de progreso a la tarea (tope 100)
+        const taskResult = await client.query(
+          `UPDATE spv_tasks
+           SET progress = LEAST(progress + 10, 100),
+               status = CASE
+                 WHEN LEAST(progress + 10, 100) >= 100 THEN 'done'
+                 WHEN progress = 0 THEN 'in-progress'
+                 ELSE status
+               END,
+               updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, title, progress, status, strategic_item_id`,
+          [linkedTaskId]
+        );
+
+        if (taskResult.rows.length > 0) {
+          const task = taskResult.rows[0];
+          let strategicProgress: number | null = null;
+          let strategicTitle: string | null = null;
+
+          // Recalcular progreso del item estrategico como promedio de sus tareas
+          if (task.strategic_item_id) {
+            const stratResult = await client.query(
+              `UPDATE spv_strategic_items s
+               SET progress = sub.avg_progress, updated_at = NOW()
+               FROM (
+                 SELECT strategic_item_id, COALESCE(AVG(progress), 0)::int AS avg_progress
+                 FROM spv_tasks WHERE strategic_item_id = $1 GROUP BY strategic_item_id
+               ) sub
+               WHERE s.id = sub.strategic_item_id
+               RETURNING s.title, s.progress`,
+              [task.strategic_item_id]
+            );
+            if (stratResult.rows.length > 0) {
+              strategicProgress = stratResult.rows[0].progress;
+              strategicTitle = stratResult.rows[0].title;
+            }
+          }
+
+          impact = {
+            taskId: task.id,
+            taskTitle: task.title,
+            taskProgress: task.progress,
+            taskStatus: task.status,
+            strategicId: task.strategic_item_id,
+            strategicTitle,
+            strategicProgress,
+          };
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json({ ok: true, message: 'Voto registrado', impact });
     } catch (err) {
+      await client.query('ROLLBACK');
       console.error('[spvMvp] Error registering vote:', err);
       res.status(500).json({ ok: false, error: 'Error registering vote' });
+    } finally {
+      client.release();
     }
   });
 

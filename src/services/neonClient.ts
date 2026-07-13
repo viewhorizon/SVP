@@ -27,6 +27,8 @@ export interface NeonActivity {
   votes_count: number;
   points_reward: number;
   is_active: boolean;
+  linked_task_id: string | null;
+  slug: string | null;
   created_at: string;
 }
 
@@ -49,6 +51,40 @@ export interface NeonHistory {
   amount: number;
   status: string;
   created_at: string;
+}
+
+export interface NeonStrategicItem {
+  id: string;
+  title: string;
+  description: string | null;
+  progress: number;
+  computed_progress: number;
+  total_tasks: number;
+  done_tasks: number;
+}
+
+export interface NeonTask {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  progress: number;
+  strategic_item_id: string | null;
+  acceptance_criteria: string[];
+  completed_criteria: string[];
+  risk: { impact?: string; probability?: string; description?: string };
+  dependencies: string[];
+  updated_at: string;
+}
+
+export interface VoteImpact {
+  taskId: string;
+  taskTitle: string;
+  taskProgress: number;
+  taskStatus: string;
+  strategicId: string | null;
+  strategicTitle: string | null;
+  strategicProgress: number | null;
 }
 
 // =====================
@@ -103,6 +139,30 @@ export async function fetchTransactions(limit = 50): Promise<NeonTransaction[]> 
   }
 }
 
+export async function fetchStrategicItems(): Promise<NeonStrategicItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/spv/strategic`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.ok ? data.data : [];
+  } catch (error) {
+    console.log("[v0] fetchStrategicItems error:", error);
+    return [];
+  }
+}
+
+export async function fetchTasks(): Promise<NeonTask[]> {
+  try {
+    const res = await fetch(`${API_BASE}/spv/tasks`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.ok ? data.data : [];
+  } catch (error) {
+    console.log("[v0] fetchTasks error:", error);
+    return [];
+  }
+}
+
 // =====================
 // CREATE Operations
 // =====================
@@ -122,7 +182,7 @@ export async function createActivity(name: string, type: "global" | "local" = "l
   }
 }
 
-export async function castVote(activityId: string, userId?: string): Promise<{ success: boolean; pointsGranted: number }> {
+export async function castVote(activityId: string, userId?: string): Promise<{ success: boolean; pointsGranted: number; impact: VoteImpact | null }> {
   try {
     const res = await fetch(`${API_BASE}/spv/vote`, {
       method: 'POST',
@@ -130,10 +190,10 @@ export async function castVote(activityId: string, userId?: string): Promise<{ s
       body: JSON.stringify({ activityId, userId, points: 10 }),
     });
     const data = await res.json();
-    return { success: data.ok, pointsGranted: data.ok ? 10 : 0 };
+    return { success: data.ok, pointsGranted: data.ok ? 10 : 0, impact: data.impact ?? null };
   } catch (error) {
     console.log("[v0] castVote error:", error);
-    return { success: false, pointsGranted: 0 };
+    return { success: false, pointsGranted: 0, impact: null };
   }
 }
 
