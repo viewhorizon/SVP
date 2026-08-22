@@ -431,6 +431,15 @@ export const DEFAULT_TASKS: Task[] = [
 const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "spv-04": "done",
   "spv-05": "done",
+  // Estado respaldado por la evidencia de testing MVP documentada en docs/TESTING_MVP_STATUS.md.
+  "test-mvp-01": "done",
+  "test-mvp-02": "done",
+  "test-mvp-03": "done",
+  "test-mvp-04": "in-progress",
+  "test-mvp-05": "todo",
+  "test-mvp-06": "done",
+  "test-mvp-07": "in-progress",
+  "test-mvp-08": "in-progress",
   "kan-03": "done",
   "kan-05": "done",
   "kan-06": "done",
