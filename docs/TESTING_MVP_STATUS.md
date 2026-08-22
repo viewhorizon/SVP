@@ -105,23 +105,22 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 |---|---|---|
 | API existente | `npm run test:api` | 15/15 aprobado previamente |
 | Build | `npm run build` | aprobado previamente |
-| API MVP | Supertest para endpoints nuevos | pendiente |
+| API MVP | Supertest para endpoints nuevos | voto real y validaciones 400/404 verificadas; suite existente 15/15 |
+| Build/check | `npm run check` + `npm run build` | aprobado |
 | Cobertura | `npm run test:coverage` | 59.77% statements / 62.15% lines |
-| Playwright | `npm run test:e2e` | 3 specs preparados; ejecución bloqueada por `libnspr4.so` ausente en Chromium |
-| E2E | `npm run test:e2e` | bloqueado por librería Chromium del runner; `apt-get` no existe en este VM. Flujo equivalente con `agent-browser` verificado: modo simulación, voto visible, consola `VOTE`, contador 1/5 y puntos 44/100 |
-| Preview | `agent-browser` con snapshot y screenshot | verificado: dashboard, Health disponible, pestañas y voto |
-| Operaciones | `agent-browser` con modo simulación | verificado: Dead-Letter, Alertas, Load Test y Conciliación renderizan; eventos sintéticos claramente etiquetados |
-| Neon | consulta de trazabilidad y scoring | seed cargado; flujo completo pendiente |
-| Operaciones/Monitoreo | estados y endpoints comprobables | pendiente |
+| Playwright | `npm run test:e2e` | 3 specs preparados; 0 ejecutables por `libnspr4.so` ausente en Chromium |
+| E2E alternativo | `agent-browser` con snapshot y screenshot | verificado: dashboard, pestañas, simulación, voto visible, consola `VOTE`, contador 1/5 y puntos 44/100 |
+| Operaciones | `agent-browser` con modo simulación | paneles renderizan; eventos sintéticos claramente etiquetados |
+| Neon | consulta de trazabilidad y scoring | voto válido propagó puntos, historial, tarea y objetivo; negativos devuelven 400/404 |
+| Operaciones/Monitoreo | estados y endpoints comprobables | aún pendiente de auditoría completa |
 
 ## Próximo orden de ejecución
 
-1. Diagnosticar y corregir Health API/backend.
-2. Auditar Operaciones y Monitoreo contra las rutas reales.
-3. Añadir tests API de trazabilidad y scoring.
-4. Ejecutar cobertura.
-5. Repetir pruebas del navegador y validar voto real.
-6. Actualizar las tareas Kanban solo con resultados reproducibles.
+1. Auditar Operaciones y Monitoreo contra las rutas reales.
+2. Añadir tests API formales de trazabilidad y scoring.
+3. Resolver la dependencia `libnspr4.so` del runner Chromium o ejecutar Playwright en un CI con dependencias instaladas.
+4. Repetir la suite E2E formal.
+5. Actualizar las tareas Kanban solo con resultados reproducibles.
 
 ## Nota de control
 

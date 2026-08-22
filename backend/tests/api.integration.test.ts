@@ -229,6 +229,35 @@ describe('SPV API integration', () => {
     expect(replayResponse.status).toBe(409);
   });
 
+  it('scoring: rejects malformed vote and keeps wallet unchanged', async () => {
+    const app = createTestApp();
+
+    const response = await request(app)
+      .post('/api/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: ACTIVITY_A, activityScope: 'invalid-scope' });
+
+    expect(response.status).toBe(400);
+
+    const balance = await request(app)
+      .get('/api/points/balance')
+      .set('Authorization', `Bearer dev:${USER_A}`);
+
+    expect(balance.status).toBe(200);
+    expect(balance.body.available).toBe(0);
+  });
+
+  it('scoring: returns an empty balance for an unknown wallet', async () => {
+    const app = createTestApp();
+
+    const response = await request(app)
+      .get('/api/points/balance/99999999-9999-4999-8999-999999999999')
+      .set('Authorization', `Bearer dev:${USER_A}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.available).toBe(0);
+  });
+
   it('webhook HMAC: rejects outdated timestamp', async () => {
     const app = createTestApp();
     process.env.WEBHOOK_SIGNING_SECRET = 'test-signing-secret';

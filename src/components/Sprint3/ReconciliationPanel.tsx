@@ -28,7 +28,7 @@ export function ReconciliationPanel() {
   const runReconciliation = async () => {
     setLoading(true);
     try {
-      const data = await requestJSON<ReconciliationReport>("/api/v1/reconciliation/run", {
+      const data = await requestJSON<ReconciliationReport>("/api/v1/reconciliation/report", {
         method: "POST",
       });
       setReport(data);

@@ -21,7 +21,7 @@ export function DeadLetterPanel() {
   const loadDeadLetterEvents = async () => {
     setLoading(true);
     try {
-      const data = await requestJSON<{ events: DeadLetterEvent[] }>("/api/v1/dead-letter/events");
+      const data = await requestJSON<{ events: DeadLetterEvent[] }>("/api/v1/dead-letter/stats");
       setEvents(data.events || []);
     } catch (error) {
       console.error("Error loading dead-letter events:", error);
@@ -32,7 +32,7 @@ export function DeadLetterPanel() {
 
   const retryEvent = async (eventId: string) => {
     try {
-      await requestJSON(`/api/v1/dead-letter/retry/${eventId}`, { method: "POST" });
+      await requestJSON(`/api/v1/dead-letter/replay`, { method: "POST", body: JSON.stringify({ outboxIds: [eventId] }) });
       setEvents(events.filter(e => e.id !== eventId));
     } catch (error) {
       console.error("Error retrying event:", error);
@@ -41,7 +41,7 @@ export function DeadLetterPanel() {
 
   const deleteEvent = async (eventId: string) => {
     try {
-      await requestJSON(`/api/v1/dead-letter/${eventId}`, { method: "DELETE" });
+      console.warn("[v0] Eliminación individual de dead-letter no está expuesta por la API");
       setEvents(events.filter(e => e.id !== eventId));
     } catch (error) {
       console.error("Error deleting event:", error);
@@ -96,8 +96,9 @@ export function DeadLetterPanel() {
                       e.stopPropagation();
                       deleteEvent(event.id);
                     }}
-                    className="rounded-full bg-red-600 p-2 text-white hover:bg-red-700"
-                    title="Eliminar"
+                    className="rounded-full bg-red-600 p-2 text-white opacity-50"
+                    title="Eliminar no disponible"
+                    disabled
                   >
                     <Trash2 size={16} />
                   </button>

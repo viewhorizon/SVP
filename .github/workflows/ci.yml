@@ -36,3 +36,9 @@ jobs:
         run: |
           npx vitest run backend/tests/api.integration.test.ts
           npx vitest run backend/tests/aiPlanning.integration.test.ts
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e
