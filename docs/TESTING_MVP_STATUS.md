@@ -94,6 +94,8 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 - El backend Express corre separado del preview Vite; ahora dispone del script reproducible `npm run dev:api`. Con `DATABASE_URL` disponible, `/health` respondió `200 healthy/database available` y `/api/spv/strategic` respondió `200` con 3 objetivos y 7 tareas agregadas.
 - Operaciones y Monitoreo deben mostrar estados reales de carga, error y disponibilidad, no asumir que sus endpoints están disponibles.
 - Health API ahora distingue `healthy`, `database_unavailable` y `backend-unreachable`; el estado seguirá sin disponibilidad si Express no se ejecuta junto al preview Vite.
+- Prueba real ejecutada contra Neon el 2026-08-22: voto sobre `Diseño de Landing Page` con usuario `demo` devolvió impacto válido; saldo pasó de 750 a 760, historial registró la operación, `task-4` pasó de 0% a 10% (`in-progress`) y `strategic-2` pasó a 5%.
+- Validaciones negativas ejecutadas tras reiniciar Express: payload incompleto devuelve `400`, puntos negativos con IDs válidos devuelven `400`, usuario inexistente devuelve `404` y actividad inexistente devuelve `404`; no se mutan datos en esos casos.
 - El selector de eventos de inventario, CRM y e-commerce es simulación cross-system; no puntúa ni muta sistemas externos.
 - El scoring real corresponde a actividades reales votadas: voto → puntos → historial → tarea → objetivo estratégico.
 
@@ -106,8 +108,9 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 | API MVP | Supertest para endpoints nuevos | pendiente |
 | Cobertura | `npm run test:coverage` | 59.77% statements / 62.15% lines |
 | Playwright | `npm run test:e2e` | 3 specs preparados; ejecución bloqueada por `libnspr4.so` ausente en Chromium |
-| E2E | `npm run test:e2e` | bloqueado por librería Chromium del runner; `apt-get` no existe en este VM |
-| Preview | `agent-browser` con snapshot y screenshot | verificado parcialmente |
+| E2E | `npm run test:e2e` | bloqueado por librería Chromium del runner; `apt-get` no existe en este VM. Flujo equivalente con `agent-browser` verificado: modo simulación, voto visible, consola `VOTE`, contador 1/5 y puntos 44/100 |
+| Preview | `agent-browser` con snapshot y screenshot | verificado: dashboard, Health disponible, pestañas y voto |
+| Operaciones | `agent-browser` con modo simulación | verificado: Dead-Letter, Alertas, Load Test y Conciliación renderizan; eventos sintéticos claramente etiquetados |
 | Neon | consulta de trazabilidad y scoring | seed cargado; flujo completo pendiente |
 | Operaciones/Monitoreo | estados y endpoints comprobables | pendiente |
 

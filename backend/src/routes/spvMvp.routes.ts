@@ -81,30 +81,47 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
   // POST /spv/vote - Registrar un voto y propagar progreso (trazabilidad)
   router.post('/spv/vote', async (req, res) => {
     const { activityId, userId, points } = req.body;
+    const reward = points === undefined ? 10 : points;
+    if (typeof activityId !== 'string' || !activityId || typeof userId !== 'string' || !userId) {
+      return res.status(400).json({ ok: false, error: 'activityId y userId son obligatorios' });
+    }
+    if (!Number.isInteger(reward) || reward <= 0 || reward > 1000) {
+      return res.status(400).json({ ok: false, error: 'points debe ser un entero entre 1 y 1000' });
+    }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      const userResult = await client.query('SELECT id FROM spv_users WHERE id = $1 FOR UPDATE', [userId]);
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+      }
 
       // Incrementar votos en la actividad y obtener su tarea vinculada
       const activityResult = await client.query(
         'UPDATE spv_activities SET votes_count = votes_count + 1, updated_at = NOW() WHERE id = $1 RETURNING name, linked_task_id',
         [activityId]
       );
+      if (activityResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ ok: false, error: 'Actividad no encontrada' });
+      }
       const activity = activityResult.rows[0];
-      const linkedTaskId: string | null = activity?.linked_task_id ?? null;
+      const linkedTaskId: string | null = activity.linked_task_id ?? null;
 
       // Agregar puntos al usuario si existe
       if (userId) {
         await client.query(
           'UPDATE spv_users SET points_balance = points_balance + $1, updated_at = NOW() WHERE id = $2',
-          [points || 10, userId]
+          [reward, userId]
         );
       }
 
       // Registrar en historial
       await client.query(
         'INSERT INTO spv_history (user_id, description, type, amount, status) VALUES ($1, $2, $3, $4, $5)',
-        [userId, `Voto en ${activity?.name ?? 'actividad'}`, 'vote', points || 10, 'success']
+        [userId, `Voto en ${activity.name}`, 'vote', reward, 'success']
       );
 
       // === TRAZABILIDAD: propagar progreso a la tarea vinculada ===
