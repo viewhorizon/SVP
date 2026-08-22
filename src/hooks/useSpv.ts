@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { 
   castVote, 
-  checkApiHealth, 
   creditPoints, 
   getSpvBootstrapState, 
   transferPoints,
   getUsers,
-  getActivities,
-  getTransactions,
   createActivity,
   updateActivity,
   deleteActivity,
@@ -95,7 +92,7 @@ export function useSpv() {
   
   // Nuevos estados para CRUD completo
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [useNeon, setUseNeon] = useState(false);
 
@@ -272,7 +269,7 @@ export function useSpv() {
 
   const addHistory = useCallback((text: string, type: HistoryEntry["type"] = "vote", amount = 0) => {
     setHistory((prev) => [
-      { id: buildId(), text, createdAt: formatDate(), type, status: "success", amount }, 
+      { id: buildId(), text, createdAt: formatDate(), type, status: "success" as const, amount }, 
       ...prev
     ].slice(0, 50));
   }, []);

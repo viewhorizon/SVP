@@ -1,7 +1,7 @@
 import { 
   Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, 
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
-  Search, Filter, Table, RefreshCw, Copy, Check
+  Search, Table, Copy, Check
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useSpv } from "./hooks/useSpv";
@@ -9,6 +9,7 @@ import { DeadLetterPanel } from "./components/Sprint3/DeadLetterPanel";
 import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
 import { LoadTestPanel } from "./components/Sprint3/LoadTestPanel";
 import { ReconciliationPanel } from "./components/Sprint3/ReconciliationPanel";
+import { ImpactNotifications } from "./components/ImpactNotifications";
 
 type TabId = "activities" | "points" | "history" | "operations";
 
@@ -51,7 +52,7 @@ export default function SPVSystem() {
     todayVotesUsed,
     totalPointsAccumulated,
     registeredUsers,
-    isLoading,
+    impactNotifications,
   } = state;
 
   // Filtrar usuarios por búsqueda
@@ -132,7 +133,7 @@ export default function SPVSystem() {
       { type: "system" as const, desc: "Sincronizacion completada", details: "150 registros procesados" },
     ];
     const randomEvent = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-    addSimulationEvent({ ...randomEvent, status: "success" });
+    addSimulationEvent({ description: randomEvent.desc, type: randomEvent.type, details: randomEvent.details, status: "success" });
   };
 
   const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode; description: string }> = [
@@ -173,7 +174,9 @@ export default function SPVSystem() {
   };
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-6">
+  <>
+  <ImpactNotifications notifications={impactNotifications} onDismiss={actions.dismissImpact} />
+  <section className="mx-auto max-w-7xl px-4 py-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -478,7 +481,7 @@ export default function SPVSystem() {
                     value={userFilter}
                     onChange={(event) => {
                       setUserFilter(event.target.value);
-                      if (!event.target.value) setReceiver("");
+                      if (!event.target.value) actions.setReceiver("");
                     }}
                     placeholder="Buscar usuario..."
                     className="w-full rounded-lg border border-slate-300 pl-9 pr-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -493,7 +496,7 @@ export default function SPVSystem() {
                         key={user.id}
                         type="button"
                         onClick={() => {
-                          setReceiver(user.username);
+                          actions.setReceiver(user.username);
                           setUserFilter("");
                         }}
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
@@ -826,6 +829,7 @@ export default function SPVSystem() {
           {lastRequestId && <p className="mt-1 text-xs text-blue-500">Request ID: {lastRequestId}</p>}
         </div>
       )}
-    </section>
+  </section>
+  </>
   );
-}
+  }
