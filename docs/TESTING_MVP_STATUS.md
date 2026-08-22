@@ -91,7 +91,7 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 
 ## Hallazgos abiertos para esta iteración
 
-- El backend Express corre separado del preview Vite y actualmente puede dejar Health API en `Offline` si no está publicado/arrancado junto al frontend.
+- El backend Express corre separado del preview Vite; ahora dispone del script reproducible `npm run dev:api`. Con `DATABASE_URL` disponible, `/health` respondió `200 healthy/database available` y `/api/spv/strategic` respondió `200` con 3 objetivos y 7 tareas agregadas.
 - Operaciones y Monitoreo deben mostrar estados reales de carga, error y disponibilidad, no asumir que sus endpoints están disponibles.
 - Health API ahora distingue `healthy`, `database_unavailable` y `backend-unreachable`; el estado seguirá sin disponibilidad si Express no se ejecuta junto al preview Vite.
 - El selector de eventos de inventario, CRM y e-commerce es simulación cross-system; no puntúa ni muta sistemas externos.
@@ -105,8 +105,8 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 | Build | `npm run build` | aprobado previamente |
 | API MVP | Supertest para endpoints nuevos | pendiente |
 | Cobertura | `npm run test:coverage` | 59.77% statements / 62.15% lines |
-| Playwright | `npm run test:e2e` | 3 specs preparados; bloqueados por `libnspr4.so` en Chromium del runner |
-| E2E | `npm run test:e2e` | bloqueado por librería Chromium del runner |
+| Playwright | `npm run test:e2e` | 3 specs preparados; ejecución bloqueada por `libnspr4.so` ausente en Chromium |
+| E2E | `npm run test:e2e` | bloqueado por librería Chromium del runner; `apt-get` no existe en este VM |
 | Preview | `agent-browser` con snapshot y screenshot | verificado parcialmente |
 | Neon | consulta de trazabilidad y scoring | seed cargado; flujo completo pendiente |
 | Operaciones/Monitoreo | estados y endpoints comprobables | pendiente |

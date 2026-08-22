@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "tsx backend/src/app.ts",
     "build": "vite build",
     "preview": "vite preview",
     "build:prod-no-single": "vite build --config vite.config.prod.ts --mode production",
@@ -44,6 +45,7 @@
     "@vitejs/plugin-react": "5.1.1",
     "@vitest/coverage-v8": "^4.1.11",
     "tailwindcss": "4.1.17",
+    "tsx": "^4.23.12",
     "typescript": "5.9.3",
     "vite": "7.2.4",
     "vite-plugin-singlefile": "2.3.0"
