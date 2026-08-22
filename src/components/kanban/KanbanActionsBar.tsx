@@ -9,7 +9,6 @@ interface KanbanActionsBarProps {
   onToggleSlideMode: () => void;
   onImportFile: () => void;
   onAnalyzeFile: () => void;
-  onAnalyzeBoard: () => void;
   onExportCsv: () => void;
   onExportJson: () => void;
   onExportJiraCsv: () => void;
@@ -35,7 +34,6 @@ export function KanbanActionsBar({
   onToggleSlideMode,
   onImportFile,
   onAnalyzeFile,
-  onAnalyzeBoard,
   onExportCsv,
   onExportJson,
   onExportJiraCsv,

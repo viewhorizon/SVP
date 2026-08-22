@@ -295,13 +295,13 @@ export async function deleteHistory(id: string): Promise<boolean> {
 // Health Check
 // =====================
 
-export async function checkNeonHealth(): Promise<{ ok: boolean; service: string }> {
+export async function checkNeonHealth(): Promise<{ ok: boolean; status: string; service: string }> {
   try {
     const res = await fetch('/health');
-    if (!res.ok) return { ok: false, service: "backend-offline" };
-    const data = await res.json();
-    return { ok: data.ok, service: data.service || "spv-api" };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, status: data.status || "backend-unavailable", service: data.service || "spv-api" };
+    return { ok: data.ok, status: data.status || "healthy", service: data.service || "spv-api" };
   } catch {
-    return { ok: false, service: "backend-error" };
+    return { ok: false, status: "backend-unreachable", service: "spv-api" };
   }
 }

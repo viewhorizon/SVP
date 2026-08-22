@@ -21,17 +21,9 @@ export const AnalyzeAIModal: React.FC<AnalyzeAIModalProps> = ({
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      // Simular análisis con IA
-      const prompt = `Analiza la siguiente documentación del proyecto y proporciona:
-1. Resumen ejecutivo (máximo 3 líneas)
-2. Dependencias técnicas identificadas
-3. Riesgos potenciales
-4. Recomendaciones de priorización
-
-Documentación:
-${documentation}`;
-
+      // Simulación local; no contacta proveedores externos ni modifica datos.
       // En implementación real, se enviaría a la IA seleccionada
+      void documentation;
       const result = `
 ✓ Análisis completado con ${selectedProvider === 'auto' ? 'proveedor automático' : selectedProvider}
 

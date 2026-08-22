@@ -258,9 +258,10 @@ export default function SPVSystem() {
       {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-3 text-xs text-amber-800">Solo genera eventos visuales de prueba. No acredita puntos ni modifica inventario, CRM o e-commerce.</p>
           <div className="flex items-center justify-between">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
-              <Activity size={16} /> Eventos de Simulacion en Tiempo Real
+              <Activity size={16} /> Eventos Sintéticos de Demostración
             </p>
             <div className="flex gap-2">
               <select

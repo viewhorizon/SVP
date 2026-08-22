@@ -234,20 +234,6 @@ export default function KanbanBoard() {
   const exportToAsanaCsv = () => downloadFile(buildAsanaCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-asana.csv`);
   const exportJson = () => downloadFile(JSON.stringify(buildKanbanExportJson(pageTasks), null, 2), "application/json;charset=utf-8;", `kanban-${roadmapPage}.json`);
 
-  const analyzePlan = async () => {
-    const eventId = createTraceId();
-    try {
-      const payload = await requestPlanningAnalysis({ tasks: pageTasks });
-      setRemoteMetrics(payload);
-      setMessage("Analisis actualizado desde /api/ai/planning/analyze.");
-      logUiTrace("Analizar tablero", "ok", `Tareas analizadas: ${pageTasks.length}`, eventId);
-    } catch {
-      setRemoteMetrics(null);
-      setMessage("No fue posible usar el analisis remoto, se muestra analisis local.");
-      logUiTrace("Analizar tablero", "error", "Fallo analisis remoto", eventId);
-    }
-  };
-
   const analyzeDocumentContent = async (document: string) => {
     const eventId = createTraceId();
     if (!document.trim()) {
@@ -484,9 +470,8 @@ export default function KanbanBoard() {
           onToggleDisplay={() => setBoardDisplay((prev) => (prev === "kanban" ? "table" : "kanban"))}
           onToggleSlideMode={() => setSlideMode((prev) => !prev)}
           onImportFile={() => importRef.current?.click()}
-          onAnalyzeFile={() => setAnalyzeAIOpen(true)}
-          onAnalyzeBoard={() => void analyzePlan()}
-          onExportCsv={exportToTrelloCsv}
+  onAnalyzeFile={() => setAnalyzeAIOpen(true)}
+  onExportCsv={exportToTrelloCsv}
           onExportJson={exportJson}
           onExportJiraCsv={exportToJiraCsv}
           onExportAsanaCsv={exportToAsanaCsv}
@@ -599,6 +584,8 @@ export default function KanbanBoard() {
         onClose={() => setAnalyzeAIOpen(false)}
         documentation={documentationToAnalyze}
         onAnalyze={(provider, result) => {
+          void analyzeDocumentContent(documentationToAnalyze);
+          void result;
           setMessage(`Análisis completado con ${provider}`);
           setAnalyzeAIOpen(false);
         }}

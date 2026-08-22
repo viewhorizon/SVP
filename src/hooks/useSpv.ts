@@ -232,10 +232,10 @@ export function useSpv() {
         return;
       }
       setHealthState("offline");
-      setHealthLabel("Offline");
+      setHealthLabel(neonHealth.status === "database_unavailable" ? "Base de datos no disponible" : "Backend no disponible");
     } catch {
       setHealthState("offline");
-      setHealthLabel("Offline");
+      setHealthLabel("Backend no disponible");
     }
   }, []);
 
