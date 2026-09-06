@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import fs from 'fs';
 
+// LEGACY RUNNER: use scripts/run_migrations.js plus versioned backend/sql migrations.
 const sql = neon(process.env.DATABASE_URL);
 
 const migrationSQL = `

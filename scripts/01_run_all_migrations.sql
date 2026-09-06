@@ -1,3 +1,4 @@
+-- LEGACY REFERENCE: canonical schema changes live in backend/sql/*.sql.
 -- SVP System - All Migrations Consolidated
 -- Executes all required migrations to set up the complete system
 

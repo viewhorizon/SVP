@@ -28,6 +28,8 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [x] `backend/src/validation/schemas.ts` centraliza validación Zod.
 - [~] MVC clásico completo: existe separación Controller/Service/Model funcional, pero no hay clases o directorios MVC explícitos; las rutas contienen parte de la orquestación de transacciones.
 - [ ] Contratos tipados compartidos entre frontend y backend; actualmente hay interfaces duplicadas en frontend y schemas/backend separados.
+- [x] Se creó `docs/SYSTEM_INDEX.md` como índice canónico; `spvApi.ts` y varios runners de migración legacy siguen existiendo, pero quedaron congelados y documentados para evitar nuevas bifurcaciones.
+- [x] La arquitectura MVC queda indexada como `vista → hook → cliente canónico → controlador → modelo/Neon`; las piezas legacy no reciben nuevas dependencias.
 
 ### 2. Frontend con propósito
 
@@ -125,3 +127,5 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 El sistema podrá considerarse íntegro para release cuando todos los P0 estén resueltos, cada panel operativo tenga un test de contrato, el flujo de scoring real tenga pruebas API y E2E, los fallbacks estén señalizados como demo y Playwright pase en CI con artefactos guardados.
 
 Última auditoría: 2026-09-06.
+
+Validación de esta revisión estructural: `npm run check`, `npm run build` y `npm run test:api` aprobados; 17/17 tests. El índice canónico está en `docs/SYSTEM_INDEX.md`.

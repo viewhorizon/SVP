@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// LEGACY RUNNER: use scripts/run_migrations.js for the canonical migration path.
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {

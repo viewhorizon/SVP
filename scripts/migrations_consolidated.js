@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
+// LEGACY REFERENCE: do not add new schema here; use backend/sql versioned migrations.
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {

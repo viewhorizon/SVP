@@ -45,6 +45,10 @@ backend/
 
 ---
 
+## Índice canónico
+
+Consulta `docs/SYSTEM_INDEX.md` antes de crear un nuevo cliente, ruta, script, panel o flujo. Ese índice identifica la fuente de verdad y los módulos legacy que no deben ampliarse. El índice también documenta el vínculo MVC `vista → hook → cliente → controlador → modelo/Neon` para evitar versiones paralelas.
+
 ## Separacion de Responsabilidades
 
 ### 1. Capa de Presentacion (UI)
