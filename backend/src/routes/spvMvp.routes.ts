@@ -80,8 +80,15 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
 
   // POST /spv/vote - Registrar un voto y propagar progreso (trazabilidad)
   router.post('/spv/vote', async (req, res) => {
-    const { activityId, userId, points } = req.body;
+    const { activityId, userId, points, externalDomain, externalReference } = req.body;
     const reward = points === undefined ? 10 : points;
+    const operationId = typeof externalReference === 'string' && externalReference.trim()
+      ? externalReference.trim()
+      : `spv-vote-${Date.now()}`;
+    const allowedExternalDomains = new Set(['inventory', 'crm', 'ecommerce']);
+    if (externalDomain !== undefined && (!allowedExternalDomains.has(externalDomain) || typeof externalReference !== 'string' || !externalReference.trim())) {
+      return res.status(400).json({ ok: false, error: 'externalDomain y externalReference deben formar un contexto externo válido' });
+    }
     if (typeof activityId !== 'string' || !activityId || typeof userId !== 'string' || !userId) {
       return res.status(400).json({ ok: false, error: 'activityId y userId son obligatorios' });
     }
@@ -120,8 +127,15 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
 
       // Registrar en historial
       await client.query(
-        'INSERT INTO spv_history (user_id, description, type, amount, status) VALUES ($1, $2, $3, $4, $5)',
-        [userId, `Voto en ${activity.name}`, 'vote', reward, 'success']
+        'INSERT INTO spv_history (user_id, description, type, amount, status, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
+        [
+          userId,
+          `Voto en ${activity.name}`,
+          'vote',
+          reward,
+          'success',
+          JSON.stringify({ operationId, externalDomain: externalDomain ?? null, externalReference: externalReference ?? null, valueUnit: 'SVP_POINTS' }),
+        ]
       );
 
       // === TRAZABILIDAD: propagar progreso a la tarea vinculada ===
@@ -188,7 +202,7 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
       }
 
       await client.query('COMMIT');
-      res.json({ ok: true, message: 'Voto registrado', impact });
+      res.json({ ok: true, message: 'Voto registrado', operationId, valueUnit: 'SVP_POINTS', impact });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('[spvMvp] Error registering vote:', err);

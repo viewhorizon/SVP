@@ -182,15 +182,30 @@ export async function createActivity(name: string, type: "global" | "local" = "l
   }
 }
 
-export async function castVote(activityId: string, userId?: string): Promise<{ success: boolean; pointsGranted: number; impact: VoteImpact | null }> {
+export async function castVote(
+  activityId: string,
+  userId?: string,
+  externalContext?: { domain: string; reference: string },
+): Promise<{ success: boolean; pointsGranted: number; impact: VoteImpact | null; operationId?: string }> {
   try {
     const res = await fetch(`${API_BASE}/spv/vote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activityId, userId, points: 10 }),
+      body: JSON.stringify({
+        activityId,
+        userId,
+        points: 10,
+        externalDomain: externalContext?.domain,
+        externalReference: externalContext?.reference,
+      }),
     });
     const data = await res.json();
-    return { success: data.ok, pointsGranted: data.ok ? 10 : 0, impact: data.impact ?? null };
+    return {
+      success: data.ok,
+      pointsGranted: data.ok ? 10 : 0,
+      impact: data.impact ?? null,
+      operationId: data.operationId,
+    };
   } catch (error) {
     console.log("[v0] castVote error:", error);
     return { success: false, pointsGranted: 0, impact: null };

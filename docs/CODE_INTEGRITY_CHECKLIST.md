@@ -33,6 +33,8 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 
 - [x] Actividades, puntos, historial, operaciones y Kanban tienen una función de producto identificable.
 - [x] Voto real conectado a Neon y propagado a saldo, historial, tarea y objetivo.
+- [x] Inventory, CRM y E-commerce se modelan como dominios externos suscritos que originan actividades SVP.
+- [x] La simulación permite seleccionar la actividad puente y ejecutar el contrato real de voto.
 - [x] Health API muestra disponibilidad del backend y base de datos.
 - [x] Paneles operativos exponen carga, errores, replay, alertas y conciliación.
 - [~] Algunos fallbacks muestran usuarios mock cuando API falla (`src/services/spvApi.ts`, `src/hooks/useSpv.ts`); válido para demo, no válido como estado de producción.
@@ -64,9 +66,11 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 
 ### 5. Simulación y observabilidad
 
-- [x] Los eventos Inventory/CRM/E-commerce están etiquetados como sintéticos.
-- [x] El aviso indica que no otorgan puntos ni modifican sistemas externos.
+- [x] Los dominios Inventory/CRM/E-commerce representan actividades externas suscritas al SVP.
+- [x] La actividad externa se valida en el controlador y se registra con `externalDomain`, `externalReference`, `operationId` y `valueUnit: SVP_POINTS`.
+- [x] El flujo de simulación ejecuta actividad externa → voto → valor SVP → saldo → historial → tarea/objetivo.
 - [x] Los eventos sirven como feedback visual y consola de operación.
+- [~] Cotización, comercio o uso de puntos como propiedad de inventario gamer queda preparado por trazabilidad, pero requiere un mercado/reglas externas antes de considerarse valor negociable.
 - [x] Backend agrega `x-request-id` y logs estructurados de método, ruta, status y duración.
 - [x] Health API y paneles exponen degradación.
 - [~] Simulación todavía usa `Math.random()` y `setTimeout()` para eventos visuales; correcto para demo, no debe confundirse con telemetría real.

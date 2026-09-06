@@ -306,7 +306,7 @@ export function useSpv() {
   }, []);
 
   // CREATE - Votar
-  const handleVote = useCallback(async (activityId: string) => {
+  const handleVote = useCallback(async (activityId: string, externalContext?: { domain: string; reference: string }) => {
     if (dailyVotesLeft <= 0) {
       setMessage("No te quedan votos hoy.");
       return;
@@ -317,7 +317,7 @@ export function useSpv() {
     // Camino Neon: captura impacto de trazabilidad
     if (useNeon) {
       try {
-        const result = await neonClient.castVote(activityId, DEMO_USER_ID);
+        const result = await neonClient.castVote(activityId, DEMO_USER_ID, externalContext);
         if (result.success) {
           setDailyVotesLeft((prev) => prev - 1);
           setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));

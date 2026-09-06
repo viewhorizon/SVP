@@ -96,8 +96,9 @@ Reporte real más reciente ejecutado el 2026-09-06 con `npm run test:coverage`: 
 - Health API ahora distingue `healthy`, `database_unavailable` y `backend-unreachable`; el estado seguirá sin disponibilidad si Express no se ejecuta junto al preview Vite.
 - Prueba real ejecutada contra Neon el 2026-08-22: voto sobre `Diseño de Landing Page` con usuario `demo` devolvió impacto válido; saldo pasó de 750 a 760, historial registró la operación, `task-4` pasó de 0% a 10% (`in-progress`) y `strategic-2` pasó a 5%.
 - Validaciones negativas ejecutadas tras reiniciar Express: payload incompleto devuelve `400`, puntos negativos con IDs válidos devuelven `400`, usuario inexistente devuelve `404` y actividad inexistente devuelve `404`; no se mutan datos en esos casos.
-- El selector de eventos de inventario, CRM y e-commerce es simulación cross-system; no puntúa ni muta sistemas externos.
-- El scoring real corresponde a actividades reales votadas: voto → puntos → historial → tarea → objetivo estratégico.
+- Inventory, CRM y E-commerce son dominios externos suscritos al SVP: originan actividades, pero el controlador SVP valida y registra el voto y la acumulación de valor.
+- La simulación permite seleccionar el dominio y una actividad real cargada desde Neon; envía `externalDomain` y `externalReference` y muestra `operationId`/`SVP_POINTS`.
+- El scoring real corresponde a actividad externa → voto → puntos/valor SVP → historial → tarea → objetivo estratégico. La cotización, comercio o uso como propiedad de inventario gamer queda condicionado a una integración de mercado externa.
 
 ## Criterios de evidencia
 

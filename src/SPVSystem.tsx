@@ -27,6 +27,7 @@ export default function SPVSystem() {
   const [simulationMode, setSimulationMode] = useState(false);
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<string>("inventory");
+  const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
   const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
   const [showDataTable, setShowDataTable] = useState(false);
@@ -126,14 +127,45 @@ export default function SPVSystem() {
     }
   };
 
-  const simulateExternalEvent = () => {
-    const eventTypes = [
-      { type: "integration" as const, desc: `Evento de ${selectedIntegration} recibido`, details: "SKU-12345 actualizado" },
-      { type: "credit" as const, desc: "Puntos acreditados por compra", details: "+50 pts por pedido #9821" },
-      { type: "system" as const, desc: "Sincronizacion completada", details: "150 registros procesados" },
-    ];
-    const randomEvent = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-    addSimulationEvent({ description: randomEvent.desc, type: randomEvent.type, details: randomEvent.details, status: "success" });
+  const simulateExternalEvent = async () => {
+    const simulationActivityId = selectedSimulationActivity || activities[0]?.id;
+    const activity = activities.find((entry) => entry.id === simulationActivityId);
+    if (!activity) {
+      addSimulationEvent({
+        description: `Actividad externa de ${selectedIntegration} no disponible`,
+        type: "integration",
+        details: "Carga las actividades suscritas al SVP antes de simular",
+        status: "error",
+      });
+      return;
+    }
+
+    addSimulationEvent({
+      description: `Actividad externa recibida desde ${selectedIntegration}`,
+      type: "integration",
+      details: `${activity.name} · contrato SVP preparado para votar`,
+      status: "pending",
+    });
+
+    try {
+      await actions.handleVote(activity.id, {
+        domain: selectedIntegration,
+        reference: `${selectedIntegration}:${activity.id}:${Date.now()}`,
+      });
+      addSimulationEvent({
+        description: `Valor SVP acumulado por ${activity.name}`,
+        type: "credit",
+        details: `Actividad ${selectedIntegration} → voto → puntos → historial`,
+        status: "success",
+      });
+    } catch (error) {
+      addSimulationEvent({
+        description: `Fallo al acreditar valor SVP por ${activity.name}`,
+        type: "system",
+        details: error instanceof Error ? error.message : "El controlador rechazó el contrato",
+        status: "error",
+      });
+    }
   };
 
   const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode; description: string }> = [
@@ -258,8 +290,8 @@ export default function SPVSystem() {
       {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-3 text-xs text-amber-800">Solo genera eventos visuales de prueba. No acredita puntos ni modifica inventario, CRM o e-commerce.</p>
-          <div className="flex items-center justify-between">
+          <p className="mb-3 text-xs text-amber-800">Inventory, CRM y E-commerce representan sistemas externos suscritos al SVP. Cada evento seleccionado ejecuta el voto real y acumula valor SVP en Neon.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
               <Activity size={16} /> Eventos Sintéticos de Demostración
             </p>
@@ -268,15 +300,27 @@ export default function SPVSystem() {
                 value={selectedIntegration}
                 onChange={(e) => setSelectedIntegration(e.target.value)}
                 className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+                aria-label="Sistema externo suscrito"
               >
                 <option value="inventory">Inventario</option>
                 <option value="ecommerce">E-commerce</option>
                 <option value="crm">CRM</option>
                 <option value="custom">Personalizado</option>
               </select>
+              <select
+                value={selectedSimulationActivity}
+                onChange={(e) => setSelectedSimulationActivity(e.target.value)}
+                className="max-w-56 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+                aria-label="Actividad externa que genera valor SVP"
+              >
+                <option value="">Seleccionar actividad SVP</option>
+                {activities.map((activity) => (
+                  <option key={activity.id} value={activity.id}>{activity.name}</option>
+                ))}
+              </select>
               <button
                 type="button"
-                onClick={simulateExternalEvent}
+                onClick={() => void simulateExternalEvent()}
                 className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
               >
                 <Send size={14} /> Simular Evento
