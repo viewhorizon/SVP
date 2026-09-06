@@ -43,7 +43,7 @@ Esta es una estimación de áreas funcionales, no un reporte de líneas de códi
 - **Trazabilidad Neon actividad → tarea → objetivo:** aproximadamente 30–40%.
 - **Cobertura global funcional estimada:** aproximadamente 50–60%.
 
-Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements **59.77% (489/818)**, Branches **40.89% (274/670)**, Functions **58.55% (89/152)** y Lines **62.15% (450/724)**. Este reporte cubre los tests Vitest configurados y excluye E2E Playwright.
+Reporte real más reciente ejecutado el 2026-09-06 con `npm run test:coverage`: Statements **60.14% (492/818)**, Branches **41.19% (276/670)**, Functions **59.21% (90/152)** y Lines **62.43% (452/724)**. Se ejecutaron **17/17 tests**; el reporte cubre Vitest y excluye E2E Playwright.
 
 ## Lo que falta probar
 
@@ -103,11 +103,11 @@ Reporte real ejecutado el 2026-08-22 con `npx vitest run --coverage`: Statements
 
 | Área | Evidencia requerida | Estado |
 |---|---|---|
-| API existente | `npm run test:api` | 15/15 aprobado previamente |
+| API existente | `npm run test:api` | 17/17 aprobado en ejecución más reciente |
 | Build | `npm run build` | aprobado previamente |
 | API MVP | Supertest para endpoints nuevos | voto real y validaciones 400/404 verificadas; suite existente 15/15 |
 | Build/check | `npm run check` + `npm run build` | aprobado |
-| Cobertura | `npm run test:coverage` | 59.77% statements / 62.15% lines |
+| Cobertura | `npm run test:coverage` | 60.14% statements / 41.19% branches / 59.21% functions / 62.43% lines |
 | Playwright | `npm run test:e2e` | 3 specs preparados; 0 ejecutables por `libnspr4.so` ausente en Chromium |
 | E2E alternativo | `agent-browser` con snapshot y screenshot | verificado: dashboard, pestañas, simulación, voto visible, consola `VOTE`, contador 1/5 y puntos 44/100 |
 | Operaciones | `agent-browser` con modo simulación | paneles renderizan; eventos sintéticos claramente etiquetados |
