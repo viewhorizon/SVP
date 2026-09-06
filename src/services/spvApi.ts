@@ -82,9 +82,11 @@ type VoteLimitsResponse = {
   usedVotes?: number;
 };
 
-// LEGACY COMPATIBILITY CLIENT
-// The active external-activity/SVP flow lives in neonClient.ts. Keep this module
-// only for existing consumers; add new operations to the canonical client instead.
+// EXTERNAL INTEGRATION ADAPTER
+// This module exposes the public activity/vote/points contract used by external
+// platforms. The current dashboard uses neonClient.ts for its Neon-backed read model;
+// do not remove or freeze this adapter while external consumers depend on /api/votes,
+// /api/points, /api/activities, or /api/transactions.
 
 // =====================
 // READ Operations

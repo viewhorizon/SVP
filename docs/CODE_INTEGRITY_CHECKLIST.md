@@ -28,8 +28,9 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [x] `backend/src/validation/schemas.ts` centraliza validación Zod.
 - [~] MVC clásico completo: existe separación Controller/Service/Model funcional, pero no hay clases o directorios MVC explícitos; las rutas contienen parte de la orquestación de transacciones.
 - [ ] Contratos tipados compartidos entre frontend y backend; actualmente hay interfaces duplicadas en frontend y schemas/backend separados.
-- [x] Se creó `docs/SYSTEM_INDEX.md` como índice canónico; `spvApi.ts` y varios runners de migración legacy siguen existiendo, pero quedaron congelados y documentados para evitar nuevas bifurcaciones.
-- [x] La arquitectura MVC queda indexada como `vista → hook → cliente canónico → controlador → modelo/Neon`; las piezas legacy no reciben nuevas dependencias.
+- [x] Se creó `docs/SYSTEM_INDEX.md` como índice canónico; los runners históricos quedan documentados y no se modifican sin decisión explícita.
+- [x] `spvApi.ts` fue verificado como adaptador de integración externa, no como script descartable; conserva el contrato de plataformas suscritas.
+- [x] La arquitectura MVC queda indexada como `vista → hook → cliente apropiado (externo o interno) → controlador → modelo/Neon`; no se congela un módulo fundamental sin evidencia de consumidores.
 
 ### 2. Frontend con propósito
 

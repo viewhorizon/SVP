@@ -26,7 +26,7 @@ Actividad externa
 | Estado SVP | `src/hooks/useSpv.ts` | No crear otro hook paralelo para votos |
 | Cliente HTTP base | `src/services/httpClient.ts` | Toda llamada nueva debe reutilizar `requestJSON` |
 | Cliente API MVP Neon | `src/services/neonClient.ts` | Fuente del flujo SPV real y de su trazabilidad |
-| Cliente API legacy | `src/services/spvApi.ts` | Mantener solo por compatibilidad; no agregar endpoints nuevos aquí |
+| Adaptador de integración externa | `src/services/spvApi.ts` | Contrato público para plataformas suscritas: actividades, votos, puntos y transacciones; no eliminar ni congelar sin verificar consumidores externos |
 | Rutas del backend | `backend/src/routes/index.ts` | Registrar cada router una sola vez |
 | Controlador MVP | `backend/src/routes/spvMvp.routes.ts` | Validar contrato y orquestar transacción |
 | Modelo/persistencia | `backend/src/db`, `backend/sql` | Queries parametrizadas y migraciones versionadas |
@@ -39,7 +39,7 @@ Actividad externa
 
 ### Clientes API
 
-`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos y llamadas parcialmente solapados. El flujo activo de SVP utiliza `neonClient.ts`; `spvApi.ts` queda congelado como compatibilidad legacy. Las nuevas funciones deben ir al cliente canónico y reutilizar `httpClient.ts`.
+`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos y llamadas parcialmente solapados, pero no son equivalentes: `spvApi.ts` representa el adaptador del contrato externo (`/api/votes`, `/api/points`, `/api/activities`, `/api/transactions`), mientras `neonClient.ts` alimenta la vista interna con `/api/spv/*`. No se descarta ni congela `spvApi.ts`; cualquier cambio debe preservar compatibilidad externa y pasar por revisión de contrato.
 
 ### Migraciones
 
