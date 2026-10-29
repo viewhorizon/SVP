@@ -25,4 +25,12 @@ Este registro evita eliminar o congelar código fundamental por una inferencia. 
 - **Fallback:** respuesta alternativa cuando falla una llamada, como datos demo o un array vacío. Un fallback de UI no es una fuente de verdad y debe mostrarse como estado degradado.
 - **Legacy/histórico:** pieza existente cuya compatibilidad debe investigarse; no significa automáticamente que esté obsoleta.
 
-Última revisión: 2026-09-06.
+## 2026-10-29 — Selectores de eventos sintéticos e inventario
+
+- El selector de actividad SVP es la fuente funcional: solo ofrece actividades cargadas desde el contrato `/api/spv/activities` y sirve para probar el flujo de voto y acumulación de valor.
+- El selector de dominio (`inventory`, `crm`, `ecommerce`, `custom`) identifica el sistema externo suscrito que origina la actividad; no representa tablas locales ni inventa integraciones externas.
+- `custom` ahora solicita el nombre del sistema externo antes de enviar el evento. No crea una actividad automáticamente: la tarjeta debe crearse mediante el formulario de actividades y persistirse por su endpoint canónico.
+- El inventario existente se conserva como consumidor posterior del saldo/ledger SVP mediante `/api/inventory/*`; no se crea un modelo paralelo de puntos ni una migración nueva.
+- Los cuatro scripts de migración revisados no fueron modificados en esta tarea porque son runners/referencias históricas y no son necesarios para corregir la semántica de los selectores.
+
+Última revisión: 2026-10-29.

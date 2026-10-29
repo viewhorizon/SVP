@@ -28,6 +28,7 @@ export default function SPVSystem() {
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<string>("inventory");
   const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
+  const [customIntegrationName, setCustomIntegrationName] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
   const [showDataTable, setShowDataTable] = useState(false);
@@ -128,11 +129,22 @@ export default function SPVSystem() {
   };
 
   const simulateExternalEvent = async () => {
+    const externalSource = selectedIntegration === "custom" ? customIntegrationName.trim() : selectedIntegration;
+    if (!externalSource) {
+      addSimulationEvent({
+        description: "Fuente externa personalizada requerida",
+        type: "integration",
+        details: "Selecciona una actividad SVP y define el sistema externo antes de simular",
+        status: "error",
+      });
+      return;
+    }
+
     const simulationActivityId = selectedSimulationActivity || activities[0]?.id;
     const activity = activities.find((entry) => entry.id === simulationActivityId);
     if (!activity) {
       addSimulationEvent({
-        description: `Actividad externa de ${selectedIntegration} no disponible`,
+        description: `Actividad externa de ${externalSource} no disponible`,
         type: "integration",
         details: "Carga las actividades suscritas al SVP antes de simular",
         status: "error",
@@ -141,21 +153,21 @@ export default function SPVSystem() {
     }
 
     addSimulationEvent({
-      description: `Actividad externa recibida desde ${selectedIntegration}`,
-      type: "integration",
+        description: `Actividad externa recibida desde ${externalSource}`,
+        type: "integration",
       details: `${activity.name} · contrato SVP preparado para votar`,
       status: "pending",
     });
 
     try {
-      await actions.handleVote(activity.id, {
-        domain: selectedIntegration,
-        reference: `${selectedIntegration}:${activity.id}:${Date.now()}`,
+  await actions.handleVote(activity.id, {
+    domain: externalSource,
+    reference: `${externalSource}:${activity.id}:${Date.now()}`,
       });
       addSimulationEvent({
         description: `Valor SVP acumulado por ${activity.name}`,
         type: "credit",
-        details: `Actividad ${selectedIntegration} → voto → puntos → historial`,
+        details: `Actividad ${externalSource} → voto → puntos → historial`,
         status: "success",
       });
     } catch (error) {
@@ -302,11 +314,20 @@ export default function SPVSystem() {
                 className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
                 aria-label="Sistema externo suscrito"
               >
-                <option value="inventory">Inventario</option>
-                <option value="ecommerce">E-commerce</option>
-                <option value="crm">CRM</option>
-                <option value="custom">Personalizado</option>
+                <option value="inventory">Dominio: Inventario</option>
+                <option value="ecommerce">Dominio: E-commerce</option>
+                <option value="crm">Dominio: CRM</option>
+                <option value="custom">Dominio: Personalizado</option>
               </select>
+              {selectedIntegration === "custom" && (
+                <input
+                  value={customIntegrationName}
+                  onChange={(event) => setCustomIntegrationName(event.target.value)}
+                  placeholder="Nombre del sistema externo"
+                  aria-label="Nombre del sistema externo personalizado"
+                  className="w-44 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+                />
+              )}
               <select
                 value={selectedSimulationActivity}
                 onChange={(e) => setSelectedSimulationActivity(e.target.value)}
