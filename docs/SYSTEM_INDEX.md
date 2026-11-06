@@ -2,6 +2,8 @@
 
 ## Propósito
 
+Este documento es el mapa canónico. Los diagramas vigentes de estructura, responsabilidades, flujo y actividad están en `docs/SYSTEM_DIAGRAMS.md`.
+
 Este documento es el mapa canónico para evitar duplicar agentes, scripts, contratos o flujos. Antes de crear una nueva versión, se debe localizar el punto de extensión correspondiente aquí.
 
 ## Flujo principal

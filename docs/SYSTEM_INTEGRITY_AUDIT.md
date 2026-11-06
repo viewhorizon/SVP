@@ -5,7 +5,9 @@ Estado: auditoría estructural ejecutada sobre el árbol actual.
 
 ## Resumen ejecutivo
 
-El sistema tiene una base funcional y modular, pero no es correcto afirmar que cada símbolo está completamente justificado ni que está listo para producción. La evidencia permite afirmar:
+El sistema tiene una base funcional y modular, pero no es correcto afirmar que cada símbolo está completamente justificado ni que está listo para producción.
+
+Inventario medido en esta revisión: `src/` contiene 35 archivos y 6.391 líneas; `backend/src/` contiene 35 archivos y 7.347 líneas; `backend/tests/` contiene 3 archivos y 582 líneas; `tests/` contiene 1 archivo y 33 líneas. Total medido: 74 archivos y 14.353 líneas de TypeScript/JavaScript. Las cifras son líneas físicas aproximadas, no complejidad ni cobertura. La evidencia permite afirmar:
 
 - Flujo funcional SVP: **aprox. 75%** (actividades, voto, puntos, historial, trazabilidad y paneles principales).
 - Preparación productiva: **aprox. 55%** (autenticación demo, contratos compartidos, pruebas E2E formales y algunos fallbacks pendientes).
