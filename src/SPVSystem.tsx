@@ -220,7 +220,7 @@ export default function SPVSystem() {
   return (
   <>
   <ImpactNotifications notifications={impactNotifications} onDismiss={actions.dismissImpact} />
-  <section className="mx-auto max-w-7xl px-4 py-6">
+  <section className="mx-auto min-w-0 max-w-7xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
