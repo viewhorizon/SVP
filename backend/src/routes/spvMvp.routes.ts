@@ -106,6 +106,26 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
       }
 
       // Incrementar votos en la actividad y obtener su tarea vinculada
+      const voteCountResult = await client.query(
+        `SELECT COUNT(*)::int AS used
+         FROM spv_history
+         WHERE user_id = $1
+           AND type = 'vote'
+           AND created_at >= date_trunc('day', NOW())
+           AND created_at < date_trunc('day', NOW()) + INTERVAL '1 day'`,
+        [userId]
+      );
+      const dailyVoteLimit = 5;
+      const usedVotes = Number(voteCountResult.rows[0]?.used ?? 0);
+      if (usedVotes >= dailyVoteLimit) {
+        await client.query('ROLLBACK');
+        return res.status(429).json({
+          ok: false,
+          error: 'Límite diario de votos alcanzado',
+          limits: { dailyLimit: dailyVoteLimit, usedVotes, remainingVotes: 0 },
+        });
+      }
+
       const activityResult = await client.query(
         'UPDATE spv_activities SET votes_count = votes_count + 1, updated_at = NOW() WHERE id = $1 RETURNING name, linked_task_id',
         [activityId]

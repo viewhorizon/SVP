@@ -858,9 +858,12 @@ export default function SPVSystem() {
                 <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <Settings size={18} /> Centro de Operaciones
                 </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Herramientas avanzadas para monitoreo, pruebas de carga y conciliacion.
-                </p>
+  <p className="mt-1 text-sm text-slate-600">
+  Herramientas avanzadas para monitoreo, pruebas de carga y conciliacion.
+  </p>
+  <p className="mt-2 text-xs text-slate-500">
+  No es un gestor de conexiones masivas: la carga solo prueba este entorno y requiere modo simulacion.
+  </p>
               </div>
               {!simulationMode && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
@@ -879,7 +882,7 @@ export default function SPVSystem() {
               <AlertsPanel />
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
-              <LoadTestPanel />
+              <LoadTestPanel simulationMode={simulationMode} />
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
               <ReconciliationPanel />
