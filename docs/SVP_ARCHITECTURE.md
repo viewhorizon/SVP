@@ -19,7 +19,7 @@ Una actividad SVP no es una etiqueta genérica ni una categoría de ocio. Debe r
 - medirse por tiempo realizado;
 - ser validado por el sistema antes de acreditar puntos.
 
-Por eso el selector que antes decía `Dominio` ahora se presenta como **Origen**. Sus opciones (`Inventario`, `E-commerce`, `CRM` o personalizado) identifican el sistema que envía el evento, no el tipo de trabajo ni una región. El segundo selector identifica la **actividad laboral registrada en SVP**.
+El selector `Dominio` identifica el origen registrado, que puede ser una empresa, un local o un sistema conectado. Sus opciones de demostración (`Inventario`, `E-commerce`, `CRM` o personalizado) representan dominios/sistemas registrados, no regiones. El selector `Seleccionar actividad:` se filtra con la relación registrada entre ese dominio y las actividades que realiza; nunca debe mostrar una actividad sin vínculo con el dominio seleccionado.
 
 ## Cálculo de puntos por hora
 

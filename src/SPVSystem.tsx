@@ -1,7 +1,7 @@
 import { 
   Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, 
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
-  Search, Table, Copy, Check
+  Search, Table, Copy, Check, Info
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useSpv } from "./hooks/useSpv";
@@ -56,6 +56,17 @@ export default function SPVSystem() {
     registeredUsers,
     impactNotifications,
   } = state;
+
+  const activitiesForSelectedOrigin = useMemo(() => {
+  const originContext: Record<string, "Actividad local" | "Actividad global" | "both"> = {
+  inventory: "Actividad local",
+  ecommerce: "Actividad global",
+  crm: "both",
+  custom: "both",
+  };
+  const context = originContext[selectedIntegration] ?? "both";
+  return context === "both" ? activities : activities.filter((activity) => activity.type === (context === "Actividad local" ? "local" : "global"));
+  }, [activities, selectedIntegration]);
 
   // Filtrar usuarios por búsqueda
   const filteredUsers = useMemo(() => {
@@ -247,9 +258,9 @@ export default function SPVSystem() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Sistema de Votos y Puntos (SVP)</h2>
           <p className="text-sm text-slate-600">Votar actividades laborales, recibir puntos y transferir puntos ganados.</p>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
-            Los puntos por hora se calculan con los votos locales y globales de una actividad, divididos por la cantidad de locales que la realizan. El registro de usuario, actividad y tiempo trabajado será la evidencia que valida los puntos acumulados.
-          </p>
+          <button type="button" className="mt-2 text-slate-500" title="Los puntos por hora se calculan con los votos locales y globales de una actividad, divididos por la cantidad de locales que la realizan. El registro de usuario, actividad y tiempo trabajado valida los puntos acumulados.">
+            <Info size={16} aria-label="Información sobre el cálculo de puntos" />
+          </button>
         </div>
       </div>
 
@@ -326,27 +337,34 @@ export default function SPVSystem() {
       {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-3 text-xs text-amber-800">Inventory, CRM y E-commerce representan sistemas externos suscritos al SVP. Cada evento seleccionado ejecuta el voto real y acumula valor SVP en Neon.</p>
+          <div className="mb-3 flex justify-end">
+            <button type="button" className="text-amber-800" title="Inventory, CRM y E-commerce representan dominios registrados. Cada evento seleccionado usa la relación dominio-actividad y ejecuta el flujo de voto configurado.">
+              <Info size={16} aria-label="Información sobre la simulación" />
+            </button>
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-  <div>
+  <div className="flex items-center gap-2">
   <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
   <Activity size={16} /> Simulación de contrato SVP
   </p>
-  <p className="mt-1 max-w-3xl text-xs leading-5 text-amber-800">
-  Esta prueba representa un evento enviado por un sistema registrado. El primer selector es la fuente de origen (no una región geográfica); el segundo es una actividad laboral real registrada en SVP. Solo deben seleccionarse trabajos que puedan registrarse y medirse por tiempo.
-  </p>
+  <button type="button" className="text-amber-800" title="El dominio es el origen registrado, como una empresa o sistema conectado. La actividad se filtra según la relación registrada con ese dominio y debe representar trabajo medible.">
+  <Info size={16} aria-label="Información sobre dominio y actividad" />
+  </button>
   </div>
             <div className="flex gap-2">
               <select
                 value={selectedIntegration}
-                onChange={(e) => setSelectedIntegration(e.target.value)}
-                className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
-aria-label="Fuente de actividad registrada"
+onChange={(e) => {
+  setSelectedIntegration(e.target.value);
+  setSelectedSimulationActivity("");
+  }}
+  className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
+  aria-label="Dominio de origen registrado"
   >
-  <option value="inventory">Origen: Inventario</option>
-  <option value="ecommerce">Origen: E-commerce</option>
-  <option value="crm">Origen: CRM</option>
-  <option value="custom">Origen: Personalizado</option>
+  <option value="inventory">Dominio: Inventario</option>
+  <option value="ecommerce">Dominio: E-commerce</option>
+  <option value="crm">Dominio: CRM</option>
+  <option value="custom">Dominio: Personalizado</option>
               </select>
               {selectedIntegration === "custom" && (
                 <input
@@ -361,10 +379,10 @@ aria-label="Fuente de actividad registrada"
                 value={selectedSimulationActivity}
                 onChange={(e) => setSelectedSimulationActivity(e.target.value)}
                 className="max-w-56 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
-aria-label="Actividad laboral registrada en SVP"
+aria-label="Actividad registrada asociada al dominio"
   >
-  <option value="">Seleccionar trabajo registrado</option>
-                {activities.map((activity) => (
+  <option value="">Seleccionar actividad:</option>
+                {activitiesForSelectedOrigin.map((activity) => (
                   <option key={activity.id} value={activity.id}>{activity.name}</option>
                 ))}
               </select>
