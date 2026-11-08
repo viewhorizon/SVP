@@ -50,7 +50,6 @@ export default function SPVSystem() {
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<string>("inventory");
   const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
-  const [customIntegrationName, setCustomIntegrationName] = useState("");
   const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
   const [showDataTable, setShowDataTable] = useState(false);
@@ -84,7 +83,6 @@ export default function SPVSystem() {
   inventory: "Actividad local",
   ecommerce: "Actividad global",
   crm: "both",
-  custom: "both",
   };
   const context = originContext[selectedIntegration] ?? "both";
   return context === "both" ? activities : activities.filter((activity) => activity.type === (context === "Actividad local" ? "local" : "global"));
@@ -162,18 +160,18 @@ export default function SPVSystem() {
   };
 
   const simulateExternalEvent = async () => {
-    const externalSource = selectedIntegration === "custom" ? customIntegrationName.trim() : selectedIntegration;
-    if (!externalSource) {
-      addSimulationEvent({
-        description: "Fuente externa personalizada requerida",
-        type: "integration",
-        details: "Selecciona una actividad SVP y define el sistema externo antes de simular",
-        status: "error",
-      });
-      return;
-    }
-
-    const simulationActivityId = selectedSimulationActivity || activities[0]?.id;
+  const externalSource = selectedIntegration;
+  if (!selectedSimulationActivity) {
+  addSimulationEvent({
+  description: "Actividad vinculada requerida",
+  type: "integration",
+  details: "Selecciona una actividad registrada para el dominio elegido antes de simular",
+  status: "error",
+  });
+  return;
+  }
+  
+  const simulationActivityId = selectedSimulationActivity;
     const activity = activities.find((entry) => entry.id === simulationActivityId);
     if (!activity) {
       addSimulationEvent({
@@ -385,20 +383,11 @@ onChange={(e) => {
   className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
   aria-label="Dominio de origen registrado"
   >
-  <option value="inventory">Dominio: Panadería</option>
-  <option value="ecommerce">Dominio: Tienda online</option>
-  <option value="crm">Dominio: Empresa de servicios</option>
-  <option value="custom">Dominio: Personalizado</option>
+  <option value="inventory">Dominio: Inventario</option>
+  <option value="ecommerce">Dominio: E-commerce</option>
+  <option value="crm">Dominio: CRM</option>
               </select>
-              {selectedIntegration === "custom" && (
-                <input
-                  value={customIntegrationName}
-                  onChange={(event) => setCustomIntegrationName(event.target.value)}
-                  placeholder="Nombre del sistema externo"
-                  aria-label="Nombre del sistema externo personalizado"
-                  className="w-44 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
-                />
-              )}
+
               <select
                 value={selectedSimulationActivity}
                 onChange={(e) => setSelectedSimulationActivity(e.target.value)}
