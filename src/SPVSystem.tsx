@@ -206,15 +206,36 @@ export default function SPVSystem() {
     a.click();
   };
 
+  const getMonitoringLogText = () => {
+  const header = [
+  "SVP Monitoring Evidence",
+  `Generated: ${new Date().toISOString()}`,
+  `Health API: ${healthLabel}`,
+  `Simulation mode: ${simulationMode ? "enabled" : "disabled"}`,
+  `Last request ID: ${lastRequestId || "none"}`,
+  "",
+  ];
+  const events = simulationEvents.map(evt =>
+  `[${evt.timestamp}] ${evt.status.toUpperCase()} ${evt.type.toUpperCase()} - ${evt.description}${evt.details ? ` - ${evt.details}` : ""}`
+  );
+  return [...header, ...(events.length ? events : ["No monitoring events recorded."])].join("\n");
+  };
+
   const copyConsoleToClipboard = () => {
-    const consoleText = simulationEvents.map(evt => 
-      `[${evt.timestamp}] ${evt.type.toUpperCase()} - ${evt.description}${evt.details ? ' - ' + evt.details : ''}`
-    ).join('\n');
-    
-    navigator.clipboard.writeText(consoleText || "No events to copy").then(() => {
-      setCopiedConsole(true);
-      setTimeout(() => setCopiedConsole(false), 2000);
-    });
+  navigator.clipboard.writeText(getMonitoringLogText()).then(() => {
+  setCopiedConsole(true);
+  setTimeout(() => setCopiedConsole(false), 2000);
+  });
+  };
+
+  const downloadMonitoringLog = () => {
+  const blob = new Blob([getMonitoringLogText()], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `svp-monitoring-${new Date().toISOString().replace(/[:.]/g, "-")}.log`;
+  anchor.click();
+  URL.revokeObjectURL(url);
   };
 
   return (
@@ -360,14 +381,24 @@ export default function SPVSystem() {
           <div className="mt-3 rounded-lg bg-slate-900 overflow-hidden">
             <div className="flex items-center justify-between bg-slate-800 px-3 py-2">
               <span className="text-xs font-semibold text-slate-300">Consola de Eventos</span>
-              <button
-                type="button"
-                onClick={copyConsoleToClipboard}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
-              >
-                {copiedConsole ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                {copiedConsole ? "Copiado" : "Copiar"}
-              </button>
+  <div className="flex flex-wrap items-center justify-end gap-1">
+  <button
+  type="button"
+  onClick={copyConsoleToClipboard}
+  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
+  >
+  {copiedConsole ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+  {copiedConsole ? "Copiado" : "Copiar"}
+  </button>
+  <button
+  type="button"
+  onClick={downloadMonitoringLog}
+  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700"
+  title="Descargar evidencia del monitoreo"
+  >
+  <Download size={14} /> Descargar
+  </button>
+  </div>
             </div>
             <div className="max-h-40 space-y-1 overflow-y-auto p-3 font-mono text-xs">
               {simulationEvents.length === 0 ? (

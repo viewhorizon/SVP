@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-all.js",
+    "dev:frontend": "vite",
     "dev:api": "tsx backend/src/app.ts",
     "build": "vite build",
     "preview": "vite preview",

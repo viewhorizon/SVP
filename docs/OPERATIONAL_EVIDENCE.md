@@ -46,7 +46,7 @@ Cada ejecución debe conservar:
 
 - Captura visual `/tmp/agent-browser/svp-operational-console.png`: viewport 346x458, modo claro; la pantalla carga y muestra cuatro actividades disponibles.
 - Captura visual `/tmp/agent-browser/svp-simulation-console.png`: el modo `Eventos Sintéticos de Demostración` se activa y expone la consola, los dos selectores y los sistemas externos.
-- Limitación observada en esta sesión: `Health API` mostró `Backend no disponible`; por tanto, esta captura demuestra el flujo de interfaz y no acredita una escritura real en Neon.
+- Limitación observada en esta sesión: `Health API` mostró `Backend no disponible`; se confirmó que Vite estaba activo, pero no había un proceso Express escuchando en el puerto 4000. La captura demuestra el flujo de interfaz, pero no acredita una escritura real en Neon. `npm run dev` ahora arranca frontend y backend mediante `scripts/dev-all.js`; el preview debe reiniciarse para tomar este cambio.
 - Tests API: 17/17 aprobados en la última ejecución registrada.
 - Verificación TypeScript (`npm run check`): aprobada en esta sesión.
 - Build: aprobado en la última auditoría registrada.
