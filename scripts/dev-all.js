@@ -1,8 +1,13 @@
 import { spawn } from "node:child_process";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const apiCommand = process.platform === "win32" ? "node.exe" : process.execPath;
 const children = [
-  spawn(npmCommand, ["run", "dev:api"], { stdio: "inherit", env: process.env }),
+  spawn(apiCommand, [
+    "--env-file-if-exists=/vercel/share/.env.project",
+    "node_modules/tsx/dist/cli.mjs",
+    "backend/src/app.ts",
+  ], { stdio: "inherit", env: process.env }),
   spawn(npmCommand, ["run", "dev:frontend"], { stdio: "inherit", env: process.env }),
 ];
 
