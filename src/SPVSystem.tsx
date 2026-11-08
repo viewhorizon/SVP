@@ -3,7 +3,7 @@ import {
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
   Search, Table, Copy, Check, Info
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useSpv } from "./hooks/useSpv";
 import { DeadLetterPanel } from "./components/Sprint3/DeadLetterPanel";
 import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
@@ -20,6 +20,28 @@ interface SimulationEvent {
   timestamp: string;
   status: "success" | "pending" | "error";
   details?: string;
+}
+
+function InfoPopover({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-label={label}
+        aria-expanded={open}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-current/30 text-current hover:bg-black/5"
+      >
+        <Info size={16} />
+      </button>
+      {open && (
+        <span role="tooltip" className="absolute right-0 top-9 z-30 w-72 rounded-lg border border-slate-200 bg-white p-3 text-left text-xs leading-5 text-slate-700 shadow-lg">
+          {children}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export default function SPVSystem() {
@@ -258,9 +280,11 @@ export default function SPVSystem() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Sistema de Votos y Puntos (SVP)</h2>
           <p className="text-sm text-slate-600">Votar actividades laborales, recibir puntos y transferir puntos ganados.</p>
-          <button type="button" className="mt-2 text-slate-500" title="Los puntos por hora se calculan con los votos locales y globales de una actividad, divididos por la cantidad de locales que la realizan. El registro de usuario, actividad y tiempo trabajado valida los puntos acumulados.">
-            <Info size={16} aria-label="Información sobre el cálculo de puntos" />
-          </button>
+          <div className="mt-2 text-slate-500">
+            <InfoPopover label="Información sobre el cálculo de puntos">
+              Los puntos por hora combinan votos locales y globales, divididos por la cantidad de locales que realizan la actividad. El usuario, la actividad y el tiempo trabajado validan los puntos acumulados.
+            </InfoPopover>
+          </div>
         </div>
       </div>
 
@@ -337,19 +361,19 @@ export default function SPVSystem() {
       {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="mb-3 flex justify-end">
-            <button type="button" className="text-amber-800" title="Inventory, CRM y E-commerce representan dominios registrados. Cada evento seleccionado usa la relación dominio-actividad y ejecuta el flujo de voto configurado.">
-              <Info size={16} aria-label="Información sobre la simulación" />
-            </button>
+          <div className="mb-3 flex justify-end text-amber-800">
+            <InfoPopover label="Información sobre la simulación">
+              Un dominio es un origen registrado, como una empresa o local. Por ejemplo: Panadería se vincula con Panadero, Vendedor y Limpieza. Solo las actividades vinculadas al dominio seleccionado deben aparecer aquí.
+            </InfoPopover>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
   <div className="flex items-center gap-2">
   <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
   <Activity size={16} /> Simulación de contrato SVP
   </p>
-  <button type="button" className="text-amber-800" title="El dominio es el origen registrado, como una empresa o sistema conectado. La actividad se filtra según la relación registrada con ese dominio y debe representar trabajo medible.">
-  <Info size={16} aria-label="Información sobre dominio y actividad" />
-  </button>
+  <InfoPopover label="Información sobre dominio y actividad">
+  El dominio es el origen registrado. Una Panadería puede vincular Panadero, Vendedor y Limpieza. Las actividades globales pueden recibir votos, pero el monitoreo y la validación de tiempo se realizan por usuario y local.
+  </InfoPopover>
   </div>
             <div className="flex gap-2">
               <select

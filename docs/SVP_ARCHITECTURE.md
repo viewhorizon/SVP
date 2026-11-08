@@ -31,7 +31,7 @@ puntos_por_hora(x) =
   / cantidad_total_de_locales_que_realizan_x
 ```
 
-Los votos expresan reconocimiento colectivo; no sustituyen la evidencia de tiempo. El resultado debe quedar asociado al usuario, al local, a la actividad, al periodo medido y a la fuente de origen.
+Los votos expresan reconocimiento colectivo; no sustituyen la evidencia de tiempo. Una actividad puede recibir votos locales y globales, pero el monitoreo operativo se realiza individualmente y por local: allí se registra quién realiza la actividad, cuándo comienza y termina, cuánto tiempo acumula y qué evidencia valida ese tiempo. El resultado debe quedar asociado al usuario, al local, a la actividad, al periodo medido y a la fuente de origen.
 
 ## Registro y validación temporal
 
