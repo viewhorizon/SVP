@@ -24,9 +24,11 @@ interface ReconciliationReport {
 export function ReconciliationPanel() {
   const [report, setReport] = useState<ReconciliationReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const runReconciliation = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await requestJSON<ReconciliationReport>("/api/v1/reconciliation/report", {
         method: "POST",
@@ -34,6 +36,7 @@ export function ReconciliationPanel() {
       setReport(data);
     } catch (error) {
       console.error("Error running reconciliation:", error);
+      setError(error instanceof Error ? error.message : "No se pudo ejecutar la conciliación");
     } finally {
       setLoading(false);
     }
@@ -103,6 +106,12 @@ export function ReconciliationPanel() {
           {loading ? "Procesando..." : "Ejecutar"}
         </button>
       </div>
+
+      {error && (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          La conciliación no pudo ejecutarse: {error}
+        </p>
+      )}
 
       {report && (
         <div className={`rounded-2xl border p-4 ${statusColor}`}>

@@ -17,9 +17,11 @@ export function AlertsPanel() {
   const [alerts, setAlerts] = useState<OperationalAlert[]>([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ activeAlerts: 0, totalAlerts: 0 });
+  const [error, setError] = useState<string | null>(null);
 
   const loadAlerts = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await requestJSON<{
         alerts: OperationalAlert[];
@@ -29,6 +31,7 @@ export function AlertsPanel() {
       setStats(data.stats || { activeAlerts: 0, totalAlerts: 0 });
     } catch (error) {
       console.error("Error loading alerts:", error);
+      setError(error instanceof Error ? error.message : "No se pudieron cargar las alertas");
     } finally {
       setLoading(false);
     }
@@ -65,6 +68,8 @@ export function AlertsPanel() {
           {loading ? "Cargando..." : "Recargar"}
         </button>
       </div>
+
+      {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">No se pudo cargar alertas: {error}</p>}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">

@@ -17,14 +17,17 @@ export function DeadLetterPanel() {
   const [events, setEvents] = useState<DeadLetterEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadDeadLetterEvents = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await requestJSON<{ events: DeadLetterEvent[] }>("/api/v1/dead-letter/stats");
       setEvents(data.events || []);
     } catch (error) {
       console.error("Error loading dead-letter events:", error);
+      setError(error instanceof Error ? error.message : "No se pudieron cargar los eventos dead-letter");
     } finally {
       setLoading(false);
     }
@@ -39,13 +42,8 @@ export function DeadLetterPanel() {
     }
   };
 
-  const deleteEvent = async (eventId: string) => {
-    try {
-      console.warn("[v0] Eliminación individual de dead-letter no está expuesta por la API");
-      setEvents(events.filter(e => e.id !== eventId));
-    } catch (error) {
-      console.error("Error deleting event:", error);
-    }
+  const deleteEvent = async (_eventId: string) => {
+    setError("La API no expone eliminación individual; usa Reintentar o corrige el evento en su sistema de origen.");
   };
 
   return (
@@ -60,6 +58,8 @@ export function DeadLetterPanel() {
           {loading ? "Cargando..." : "Recargar"}
         </button>
       </div>
+
+      {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">No se pudo cargar dead-letter: {error}</p>}
 
       {events.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center">

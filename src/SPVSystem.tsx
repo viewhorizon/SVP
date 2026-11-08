@@ -36,7 +36,7 @@ function InfoPopover({ label, children }: { label: string; children: ReactNode }
         <Info size={16} />
       </button>
       {open && (
-        <span role="tooltip" className="absolute right-0 top-9 z-30 w-72 rounded-lg border border-slate-200 bg-white p-3 text-left text-xs leading-5 text-slate-700 shadow-lg">
+        <span role="tooltip" className="absolute right-0 top-9 z-30 w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 text-left text-xs leading-5 text-slate-700 shadow-lg">
           {children}
         </span>
       )}
@@ -385,9 +385,9 @@ onChange={(e) => {
   className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
   aria-label="Dominio de origen registrado"
   >
-  <option value="inventory">Dominio: Inventario</option>
-  <option value="ecommerce">Dominio: E-commerce</option>
-  <option value="crm">Dominio: CRM</option>
+  <option value="inventory">Dominio: Panadería</option>
+  <option value="ecommerce">Dominio: Tienda online</option>
+  <option value="crm">Dominio: Empresa de servicios</option>
   <option value="custom">Dominio: Personalizado</option>
               </select>
               {selectedIntegration === "custom" && (
@@ -947,9 +947,16 @@ aria-label="Actividad registrada asociada al dominio"
   </p>
               </div>
               {!simulationMode && (
-                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                   <AlertTriangle size={16} className="text-amber-600" />
-                  <span className="text-xs text-amber-700">Activa el modo simulacion para probar</span>
+                  <span className="text-xs text-amber-700">Activa el modo simulación para habilitar pruebas controladas.</span>
+                  <button
+                    type="button"
+                    onClick={() => setSimulationMode(true)}
+                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                  >
+                    Activar simulación
+                  </button>
                 </div>
               )}
             </div>

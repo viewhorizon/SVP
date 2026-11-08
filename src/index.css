@@ -7,6 +7,14 @@ body,
   overflow-x: hidden;
 }
 
+button:not(:disabled) {
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
 /* Hide scrollbars while preserving scroll behavior on touch devices. */
 .hide-scrollbar {
   -ms-overflow-style: none;
