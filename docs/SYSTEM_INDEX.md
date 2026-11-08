@@ -4,7 +4,7 @@
 
 Este documento es el mapa canónico. Los diagramas vigentes de estructura, responsabilidades, flujo y actividad están en `docs/SYSTEM_DIAGRAMS.md`.
 
-Este documento es el mapa canónico para evitar duplicar agentes, scripts, contratos o flujos. Antes de crear una nueva versión, se debe localizar el punto de extensión correspondiente aquí. La guía de ejecución demostrable está en `docs/OPERATIONAL_EVIDENCE.md`; el plan de continuidad está en `docs/BACKLOG_NEXT_SPRINTS.md`.
+Este documento es el mapa canónico para evitar duplicar agentes, scripts, contratos o flujos. Antes de crear una nueva versión, se debe localizar el punto de extensión correspondiente aquí. La guía de ejecución demostrable está en `docs/OPERATIONAL_EVIDENCE.md`; la arquitectura funcional está en `docs/SVP_ARCHITECTURE.md`; el plan de continuidad está en `docs/BACKLOG_NEXT_SPRINTS.md`.
 
 ## Flujo principal
 
