@@ -1,63 +1,32 @@
-# Arquitectura funcional de SVP
+# SVP — especificación funcional breve
 
-## Qué es SVP
+## Propósito
 
-SVP significa **Sistema de Votos y Puntos**. La plataforma coordina tres operaciones sobre actividades laborales registradas:
+SVP convierte trabajo y actividad monitoreados en puntos. Los votos locales y globales son señales de entrada a la fórmula; no son dinero ni una instrucción para comprar bienes o servicios. No se ha definido una relación entre votos y compras.
 
-1. **Votar una actividad:** los usuarios registrados votan la actividad que realizan o reconocen.
-2. **Recibir puntos:** el sistema acredita puntos ganados según actividad y tiempo validado.
-3. **Transferir puntos:** los usuarios registrados pueden enviar puntos a otro usuario mediante el ledger de SVP.
+## Unidad operativa
 
-Las aplicaciones conectadas consumen la API de SVP únicamente después de registrar su sistema, sus usuarios y sus referencias de actividad.
+El monitoreo ocurre por persona, actividad y local: registrar quién realizó la actividad, cuándo, cuánto tiempo y qué evidencia valida el periodo. Solo el tiempo verificado y la actividad vinculada pueden entrar al cálculo de puntos. Los votos globales y locales alimentan la fórmula de conversión definida por el sistema.
 
-## Actividad válida
+**Flujo previsto:** persona + actividad/local → sesiones y evidencia → validación del tiempo → votos locales/globales como factores → fórmula → puntos → historial. Las transferencias de puntos son aparte; ningún flujo de compra queda implícito.
 
-Una actividad SVP no es una etiqueta genérica ni una categoría de ocio. Debe representar un trabajo que pueda:
+## Relación Dominio (Origen) → Actividades
 
-- registrarse a nombre de un usuario o local;
-- asociarse a un sistema de origen y una referencia externa;
-- medirse por tiempo realizado;
-- ser validado por el sistema antes de acreditar puntos.
+El selector de actividad depende del dominio elegido. Ejemplo solicitado: `Panadería → Panadero, Vendedor, Limpieza`. La demo también muestra `Restaurante → Cocinero, Mesero, Limpieza` y `Peluquería → Peluquero, Recepcionista, Limpieza`. Solo aparecen actividades vinculadas y registradas; si falta la actividad backend, no se puede simular ese evento.
 
-El selector `Dominio` identifica el origen registrado, que puede ser una empresa, un local o un sistema conectado. Sus opciones de demostración (`Inventario`, `E-commerce`, `CRM` o personalizado) representan dominios/sistemas registrados, no regiones. El selector `Seleccionar actividad:` se filtra con la relación registrada entre ese dominio y las actividades que realiza; nunca debe mostrar una actividad sin vínculo con el dominio seleccionado.
+Actualmente esas tres relaciones viven en `SIMULATION_DOMAIN_LINKS` de `src/SPVSystem.tsx`; son configuración de demostración, no asociaciones persistidas ni un catálogo editable en producción.
 
-## Cálculo de puntos por hora
+## Implementación existente y brechas
 
-Para una actividad `x`, el valor por hora de cada local se determina con:
+- `POST /api/votes` en `backend/src/routes/votes.routes.ts` calcula el otorgamiento usando `point_rules` y registra votos/ledger.
+- El dashboard todavía usa `POST /api/spv/vote` en `backend/src/routes/spvMvp.routes.ts`; esa ruta acredita un reward fijo (10 por defecto) en `spv_users.points_balance`. No es la fórmula canónica y debe converger antes de considerarse cálculo productivo.
+- El monitoreo de sesiones/tiempo y su evidencia no está implementado de extremo a extremo.
+- Las rutas de inventario/wallet son independientes. No documentan ni autorizan compras con votos.
 
-```text
-puntos_por_hora(x) =
-  (votos_a_x_de_actividad_local + votos_a_x_de_actividad_global)
-  / cantidad_total_de_locales_que_realizan_x
-```
+## Fallbacks comprobados en código
 
-Los votos expresan reconocimiento colectivo; no sustituyen la evidencia de tiempo. Una actividad puede recibir votos locales y globales, pero el monitoreo operativo se realiza individualmente y por local: allí se registra quién realiza la actividad, cuándo comienza y termina, cuánto tiempo acumula y qué evidencia valida ese tiempo. El resultado debe quedar asociado al usuario, al local, a la actividad, al periodo medido y a la fuente de origen.
+- `src/services/spvApi.ts`: `getUsers` retorna cinco usuarios mock si falla; `getActivities`, `getTransactions` y `getTableData` retornan `[]`; `createActivity` y `updateActivity` fabrican respuestas locales; deletes y `cancelTransfer` ignoran errores.
+- `src/hooks/useSpv.ts`: si fallan las llamadas reales, el voto y la transferencia pueden actualizar el estado local y mostrar éxito.
+- Hay diferencias entre rutas cliente `/api/users` y `/api/activities` y rutas MVP del backend `/api/spv/users` y `/api/spv/activities`; no son el mismo contrato.
 
-## Registro y validación temporal
-
-El flujo productivo requiere:
-
-```text
-usuario registrado
-  -> actividad laboral registrada
-  -> inicio/fin o sesiones de actividad
-  -> tiempo validado
-  -> votos locales + globales
-  -> puntos por hora
-  -> puntos acreditados
-  -> historial y transferencias
-```
-
-La simulación actual valida el contrato de evento, el voto y la trazabilidad visual. No debe presentarse como validación de horas hasta que el backend registre sesiones de actividad, reglas de evidencia y su conciliación.
-
-## API y permisos
-
-La API está destinada a usuarios registrados y a aplicaciones registradas que operan en nombre de esos usuarios. Sus funciones principales son:
-
-- actividades y referencias externas;
-- votos con límite e idempotencia;
-- acreditación y consulta de puntos;
-- transferencias entre usuarios;
-- historial, auditoría y evidencia operativa.
-
-Cada operación debe conservar usuario, actividad, origen, referencia externa, `requestId`, timestamp y estado. La UI no debe usar datos sintéticos como sustituto silencioso de una respuesta de API.
+Este documento describe comportamiento comprobado y separa los flujos funcionales previstos de lo que aún falta implementar.

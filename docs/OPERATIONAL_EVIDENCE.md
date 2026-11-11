@@ -1,66 +1,30 @@
-# Evidencia operativa del sistema SVP
+# SVP — guía breve de verificación
 
-## Propósito
+## Flujo previsto
 
-Este documento define cómo demostrar el flujo completo del Sistema de Votos y Puntos (SVP), desde una actividad externa hasta el valor acumulado, la persistencia y la observabilidad. La consola de simulación no sustituye la base de datos: sirve como guía visible de ejecución y debe coincidir con los registros del backend.
+`Dominio (Origen) → actividad vinculada → monitoreo individual/local (persona + tiempo + evidencia) → votos locales/globales como factores → fórmula de conversión → puntos`.
 
-## Flujo verificable
+Votos no son compras. La demo tiene relaciones configuradas en `SIMULATION_DOMAIN_LINKS` (Panadería, Restaurante y Peluquería); esas relaciones no están guardadas en backend.
 
-1. **Origen externo**: Inventory, CRM, E-commerce o un adaptador personalizado representa una plataforma suscrita al SVP.
-2. **Actividad SVP**: el selector usa una actividad real cargada desde `/api/activities` y no una tarjeta ficticia local.
-3. **Contrato**: la vista envía el identificador de actividad, dominio externo, referencia y `requestId` al adaptador `spvApi`.
-4. **Controlador**: Express valida el contrato, identifica usuario/actividad, aplica límites e idempotencia.
-5. **Modelo/Neon**: el voto, saldo, historial y vínculos de tarea/objetivo se escriben de forma transaccional.
-6. **Resultado**: la interfaz muestra puntos, progreso, notificación de impacto y evento en la consola.
-7. **Auditoría**: `requestId`, `eventId`, estado, timestamp y mensaje permiten reconstruir la operación.
+## Implementación a distinguir
 
-## Evidencia por módulo
+- Dashboard: `src/hooks/useSpv.ts` llama `src/services/neonClient.ts` y `POST /api/spv/vote`. Esa ruta MVP registra el voto y acredita un reward fijo; no representa la fórmula de conversión final.
+- Contrato formal: `POST /api/votes` (`backend/src/routes/votes.routes.ts`) usa `point_rules` y `points_ledger`.
+- Tiempo y evidencia laboral: no está completo de extremo a extremo.
+- Inventario: rutas independientes; no se deriva de ello un requisito de compra con puntos.
 
-| Módulo | Evidencia requerida | Resultado esperado |
-| --- | --- | --- |
-| Health API | respuesta `/health` y estado visible | servicio y base de datos diferenciados |
-| Actividades | captura/listado y respuesta API | actividades reales disponibles |
-| Votación | log pending → success/error | puntos y límite diario actualizados |
-| Puntos | saldo antes/después e historial | operación persistida |
-| Inventario | evento externo con referencia de objeto | consumo futuro de saldo SVP trazable |
-| CRM/E-commerce | evento externo con dominio | misma cadena SVP, sin sistemas externos falsos |
-| Operaciones | paneles y endpoint correspondiente | errores, alertas, dead-letter, carga y conciliación observables |
-| Kanban | tarea y objetivo vinculados | progreso actualizado sin datos desconectados |
-| Errores | payload inválido, 404, rollback | respuesta controlada y sin mutación parcial |
+## Verificación recomendada
 
-## Registro de ejecución
+1. Elegir Dominio (Origen) y comprobar que el segundo selector solo muestra actividades vinculadas y registradas.
+2. Si no hay una actividad backend con ese nombre, la simulación debe quedar deshabilitada; no simular un voto ficticio.
+3. Al votar, contrastar la respuesta de la ruta, votos, regla aplicada, ledger/historial y saldo.
+4. En viewport móvil y 1512×720, comprobar que los selectores y botones no se desbordan y que la página puede desplazarse verticalmente.
+5. Registrar commit, viewport, endpoint y evidencia real. No describir un estado local/mock como persistido.
 
-Cada ejecución debe conservar:
+## Fallbacks que existen en el código
 
-- fecha y entorno;
-- commit probado;
-- viewport y modo de navegador;
-- `requestId`/`eventId`;
-- actividad y dominio externo;
-- saldo y puntos antes/después;
-- resultado de cada endpoint;
-- captura de pantalla o snapshot del panel;
-- errores y limitaciones del entorno.
+- `src/services/spvApi.ts`: `getUsers` devuelve usuarios mock en catch; `getActivities`, `getTransactions`, `getTableData` devuelven `[]`; create/update devuelven objetos locales; algunos deletes/cancelaciones tragan errores.
+- `src/hooks/useSpv.ts`: el catch de voto actualiza puntos/historial localmente; el catch de transferencia también cambia el balance local y muestra éxito.
+- `src/SPVSystem.tsx`: el catálogo de vínculos es configuración de demo; no prueba una relación persistida en base de datos.
 
-## Evidencia actual
-
-- Captura visual `/tmp/agent-browser/svp-operational-console.png`: viewport 346x458, modo claro; la pantalla carga y muestra cuatro actividades disponibles.
-- Captura visual `/tmp/agent-browser/svp-simulation-console.png`: el modo `Eventos Sintéticos de Demostración` se activa y expone la consola, los dos selectores y los sistemas externos.
-- Limitación observada en esta sesión: `Health API` mostró `Backend no disponible`; se confirmó que Vite estaba activo, pero no había un proceso Express escuchando en el puerto 4000. La captura demuestra el flujo de interfaz, pero no acredita una escritura real en Neon. `npm run dev` ahora arranca frontend y backend mediante `scripts/dev-all.js`; el preview debe reiniciarse para tomar este cambio.
-- Tests API: 17/17 aprobados en la última ejecución registrada.
-- Verificación TypeScript (`npm run check`): aprobada en esta sesión.
-- Build: aprobado en la última auditoría registrada.
-- Cobertura: indicador disponible; no es criterio único de aceptación.
-- Flujo externo → actividad → voto → puntos → historial → tarea/objetivo: verificado funcionalmente contra Neon en la auditoría previa.
-- Flujo de navegador formal Playwright: requiere un runner con dependencias Chromium; el preview se ha verificado con `agent-browser` como alternativa funcional.
-
-## Trabajo restante para robustez
-
-1. Automatizar el registro de cada paso en un artefacto de CI.
-2. Ejecutar E2E formal en CI con Chromium y adjuntar screenshots/traces.
-3. Añadir pruebas de cada panel operativo contra su endpoint real.
-4. Probar rollback, concurrencia y duplicación con datos aislados.
-5. Definir retención y redacción de logs para no exponer datos sensibles.
-6. Repetir la matriz con una actividad de inventario que tenga `externalReference` de objeto gamer.
-
-La consola es evidencia de comportamiento del frontend; la prueba de integridad requiere contrastarla con respuestas HTTP y registros persistidos.
+Estas son observaciones directas de implementación, no requisitos de producto. La prueba de persistencia requiere respuestas HTTP y datos en backend.

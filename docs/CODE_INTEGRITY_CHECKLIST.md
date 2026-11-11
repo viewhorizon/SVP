@@ -35,12 +35,11 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 ### 2. Frontend con propósito
 
 - [x] Actividades, puntos, historial, operaciones y Kanban tienen una función de producto identificable.
-- [~] Voto MVP actualiza `spv_users.points_balance`, historial, tarea y objetivo; no acredita `points_wallet`/`points_ledger`.
-- [x] Compra inventario debita `points_wallet`/`points_ledger` y registra inventario, cross-system transaction y hash-chain en una transacción.
-- [ ] Unificar o mapear identidades/saldos entre el voto MVP (`spv_users`) y el inventario (`points_wallet`); hasta entonces los puntos de voto no son saldo de compra demostrado.
-- [ ] Añadir interfaz frontend conectada a catálogo, inventario personal y compra; los endpoints API están presentes, no se encontraron consumidores UI.
-- [x] Inventory, CRM y E-commerce se modelan como dominios externos suscritos que originan actividades SVP.
-- [x] La simulación permite seleccionar la actividad puente y ejecutar el contrato real de voto.
+- [~] Voto dashboard MVP acredita reward fijo (10 por defecto) en `spv_users.points_balance`; la conversión configurable por `point_rules` está en `/api/votes` y el dashboard aún no usa esa ruta.
+- [x] El dominio de inventario tiene rutas/ledger propios, separados del propósito de voto y conversión SVP.
+- [x] La especificación no atribuye capacidad de compra a votos; cualquier uso comercial requiere un requerimiento separado.
+- [x] La demo vincula explícitamente cada Dominio (Origen) con sus actividades; una actividad no vinculada o no registrada no se puede simular.
+- [ ] Persistir el catálogo dominio-actividad en backend antes de describirlo como administración productiva.
 - [x] Health API muestra disponibilidad del backend y base de datos.
 - [x] Paneles operativos exponen carga, errores, replay, alertas y conciliación.
 - [~] Algunos fallbacks muestran usuarios mock cuando API falla (`src/services/spvApi.ts`, `src/hooks/useSpv.ts`); válido para demo, no válido como estado de producción.
@@ -52,8 +51,8 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [x] Vite hace proxy de `/api` y `/health` al backend Express.
 - [x] Backend crea `Pool` con `DATABASE_URL` y ejecuta consultas parametrizadas.
 - [x] `/health` ejecuta `SELECT 1` y distingue backend/base de datos no disponible.
-- [x] Endpoints SPV de actividades, usuarios, historial, transacciones, tareas, objetivos, voto y transferencia están conectados.
-- [x] Prueba real validó `actividad → voto → puntos → historial → task-4 → strategic-2`.
+- [~] Dashboard MVP usa rutas `/api/spv/*`; el helper `spvApi.ts` llama prefijos distintos para algunos recursos y contiene fallbacks locales.
+- [ ] No afirmar verificación end-to-end de la fórmula de puntos hasta unificar `/api/spv/vote` con `/api/votes` y comprobar tiempo validado.
 - [x] Casos inválidos devuelven 400/404 y no mutan datos.
 - [~] Algunas funciones legacy en `spvApi.ts` silencian errores y devuelven `false`, `[]` o `null`.
 - [ ] Migrar errores silenciosos a un resultado discriminado `{ data, error, source }` para distinguir vacío real de backend caído.

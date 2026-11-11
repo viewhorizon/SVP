@@ -85,7 +85,7 @@ export function createSpvMvpRouter({ pool }: { pool: Pool }) {
     const operationId = typeof externalReference === 'string' && externalReference.trim()
       ? externalReference.trim()
       : `spv-vote-${Date.now()}`;
-    const allowedExternalDomains = new Set(['inventory', 'crm', 'ecommerce']);
+    const allowedExternalDomains = new Set(['inventory', 'crm', 'ecommerce', 'panaderia', 'restaurante', 'peluqueria']);
     if (externalDomain !== undefined && (!allowedExternalDomains.has(externalDomain) || typeof externalReference !== 'string' || !externalReference.trim())) {
       return res.status(400).json({ ok: false, error: 'externalDomain y externalReference deben formar un contexto externo válido' });
     }

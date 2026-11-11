@@ -22,6 +22,15 @@ interface SimulationEvent {
   details?: string;
 }
 
+const SIMULATION_DOMAIN_LINKS = [
+  { id: "panaderia", label: "Panadería", activities: ["Panadero", "Vendedor", "Limpieza"] },
+  { id: "restaurante", label: "Restaurante", activities: ["Cocinero", "Mesero", "Limpieza"] },
+  { id: "peluqueria", label: "Peluquería", activities: ["Peluquero", "Recepcionista", "Limpieza"] },
+] as const;
+
+const normalizeActivityName = (name: string) =>
+  name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("es");
+
 function InfoPopover({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -48,7 +57,7 @@ export default function SPVSystem() {
   const [activeTab, setActiveTab] = useState<TabId>("activities");
   const [simulationMode, setSimulationMode] = useState(false);
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
-  const [selectedIntegration, setSelectedIntegration] = useState<string>("inventory");
+  const [selectedOriginId, setSelectedOriginId] = useState<string>("panaderia");
   const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
   const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
@@ -78,15 +87,11 @@ export default function SPVSystem() {
     impactNotifications,
   } = state;
 
+  const selectedOrigin = SIMULATION_DOMAIN_LINKS.find((origin) => origin.id === selectedOriginId) ?? SIMULATION_DOMAIN_LINKS[0];
   const activitiesForSelectedOrigin = useMemo(() => {
-  const originContext: Record<string, "Actividad local" | "Actividad global" | "both"> = {
-  inventory: "Actividad local",
-  ecommerce: "Actividad global",
-  crm: "both",
-  };
-  const context = originContext[selectedIntegration] ?? "both";
-  return context === "both" ? activities : activities.filter((activity) => activity.type === (context === "Actividad local" ? "local" : "global"));
-  }, [activities, selectedIntegration]);
+    const linkedNames = new Set(selectedOrigin.activities.map(normalizeActivityName));
+    return activities.filter((activity) => linkedNames.has(normalizeActivityName(activity.name)));
+  }, [activities, selectedOrigin]);
 
   // Filtrar usuarios por búsqueda
   const filteredUsers = useMemo(() => {
@@ -160,7 +165,7 @@ export default function SPVSystem() {
   };
 
   const simulateExternalEvent = async () => {
-  const externalSource = selectedIntegration;
+  const externalSource = selectedOrigin.id;
   if (!selectedSimulationActivity) {
   addSimulationEvent({
   description: "Actividad vinculada requerida",
@@ -184,9 +189,9 @@ export default function SPVSystem() {
     }
 
     addSimulationEvent({
-        description: `Actividad externa recibida desde ${externalSource}`,
+        description: `Actividad externa recibida desde ${selectedOrigin.label}`,
         type: "integration",
-      details: `${activity.name} · contrato SVP preparado para votar`,
+      details: `${selectedOrigin.label} → ${activity.name} · vínculo registrado`,
       status: "pending",
     });
 
@@ -196,14 +201,14 @@ export default function SPVSystem() {
     reference: `${externalSource}:${activity.id}:${Date.now()}`,
       });
       addSimulationEvent({
-        description: `Valor SVP acumulado por ${activity.name}`,
-        type: "credit",
-        details: `Actividad ${externalSource} → voto → puntos → historial`,
+        description: `Voto registrado: ${activity.name}`,
+        type: "vote",
+        details: `${selectedOrigin.label} → ${activity.name}; dashboard MVP aún otorga reward fijo, no la fórmula final.`,
         status: "success",
       });
     } catch (error) {
       addSimulationEvent({
-        description: `Fallo al acreditar valor SVP por ${activity.name}`,
+        description: `No se pudo registrar el voto de ${activity.name}`,
         type: "system",
         details: error instanceof Error ? error.message : "El controlador rechazó el contrato",
         status: "error",
@@ -277,10 +282,10 @@ export default function SPVSystem() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Sistema de Votos y Puntos (SVP)</h2>
-          <p className="text-sm text-slate-600">Votar actividades laborales, recibir puntos y transferir puntos ganados.</p>
+          <p className="text-sm text-slate-600">Los votos alimentan la fórmula de conversión a puntos; el monitoreo valida la actividad y el tiempo.</p>
           <div className="mt-2 text-slate-500">
             <InfoPopover label="Información sobre el cálculo de puntos">
-              Los puntos por hora combinan votos locales y globales, divididos por la cantidad de locales que realizan la actividad. El usuario, la actividad y el tiempo trabajado validan los puntos acumulados.
+              Los votos locales y globales alimentan la fórmula; el monitoreo valida actividad y tiempo por persona y local. Un voto no es una compra. Aviso: el endpoint MVP del dashboard aún otorga un reward fijo y no aplica la fórmula final.
             </InfoPopover>
           </div>
         </div>
@@ -373,38 +378,50 @@ export default function SPVSystem() {
   El dominio es el origen registrado. Una Panadería puede vincular Panadero, Vendedor y Limpieza. Las actividades globales pueden recibir votos, pero el monitoreo y la validación de tiempo se realizan por usuario y local.
   </InfoPopover>
   </div>
-            <div className="flex gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto">
               <select
-                value={selectedIntegration}
-onChange={(e) => {
-  setSelectedIntegration(e.target.value);
-  setSelectedSimulationActivity("");
-  }}
-  className="rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
-  aria-label="Dominio de origen registrado"
-  >
-  <option value="inventory">Dominio: Inventario</option>
-  <option value="ecommerce">Dominio: E-commerce</option>
-  <option value="crm">Dominio: CRM</option>
+                value={selectedOriginId}
+                onChange={(e) => {
+                  setSelectedOriginId(e.target.value);
+                  setSelectedSimulationActivity("");
+                }}
+                className="min-w-0 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm xl:w-48"
+                aria-label="Dominio de origen"
+              >
+                {SIMULATION_DOMAIN_LINKS.map((origin) => (
+                  <option key={origin.id} value={origin.id}>{origin.label}</option>
+                ))}
               </select>
 
               <select
                 value={selectedSimulationActivity}
                 onChange={(e) => setSelectedSimulationActivity(e.target.value)}
-                className="max-w-56 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs"
-aria-label="Actividad registrada asociada al dominio"
-  >
-  <option value="">Seleccionar actividad:</option>
-                {activitiesForSelectedOrigin.map((activity) => (
-                  <option key={activity.id} value={activity.id}>{activity.name}</option>
-                ))}
+                className="min-w-0 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm xl:w-56"
+                aria-label={`Actividad vinculada a ${selectedOrigin.label}`}
+              >
+                <option value="">Seleccionar actividad</option>
+                {selectedOrigin.activities.map((activityName) => {
+                  const registeredActivity = activitiesForSelectedOrigin.find(
+                    (activity) => normalizeActivityName(activity.name) === normalizeActivityName(activityName),
+                  );
+                  return (
+                    <option
+                      key={activityName}
+                      value={registeredActivity?.id ?? `unregistered:${activityName}`}
+                      disabled={!registeredActivity}
+                    >
+                      {activityName}{registeredActivity ? "" : " (no registrada)"}
+                    </option>
+                  );
+                })}
               </select>
               <button
                 type="button"
                 onClick={() => void simulateExternalEvent()}
-                className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                disabled={!selectedSimulationActivity}
+                className="inline-flex items-center justify-center gap-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send size={14} /> Simular Evento
+                <Send size={14} /> Simular evento
               </button>
               <button
                 type="button"

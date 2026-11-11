@@ -40,10 +40,13 @@ const MAX_AVAILABLE_POINTS = 100;
 const HISTORY_STORAGE_KEY = "spv.history.v1";
 
 const INITIAL_ACTIVITIES: ActivityItem[] = [
-  { id: "act-global-001", name: "Peluquerias", type: "global", pointsPerHour: 1.03, votes: 50234, context: "Actividad global" },
-  { id: "act-local-001", name: "EligeStyle", type: "local", pointsPerHour: 1.44, votes: 14502, context: "Actividad local" },
-  { id: "act-global-002", name: "Restaurantes", type: "global", pointsPerHour: 0.89, votes: 32100, context: "Actividad global" },
-  { id: "act-local-002", name: "FitZone Gym", type: "local", pointsPerHour: 1.22, votes: 8745, context: "Actividad local" },
+  { id: "act-bakery-baker", name: "Panadero", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
+  { id: "act-bakery-sales", name: "Vendedor", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
+  { id: "act-bakery-cleaning", name: "Limpieza", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
+  { id: "act-restaurant-cook", name: "Cocinero", type: "local", pointsPerHour: 1, votes: 0, context: "Restaurante" },
+  { id: "act-restaurant-server", name: "Mesero", type: "local", pointsPerHour: 1, votes: 0, context: "Restaurante" },
+  { id: "act-salon-hairdresser", name: "Peluquero", type: "local", pointsPerHour: 1, votes: 0, context: "Peluquería" },
+  { id: "act-salon-reception", name: "Recepcionista", type: "local", pointsPerHour: 1, votes: 0, context: "Peluquería" },
 ];
 
 const buildId = () => crypto.randomUUID();

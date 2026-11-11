@@ -9,20 +9,13 @@ Este documento es el mapa canónico para evitar duplicar agentes, scripts, contr
 ## Flujo principal
 
 ```text
-Actividad externa (voto MVP)
-  -> src/SPVSystem.tsx -> src/hooks/useSpv.ts -> src/services/neonClient.ts
-  -> /api/spv/vote -> backend/src/routes/spvMvp.routes.ts
-  -> spv_users.points_balance + spv_history + tarea + objetivo estratégico
-
-Compra desde inventario (flujo transaccional distinto)
-  -> /api/inventory/purchase -> backend/src/routes/inventory.routes.ts
-  -> points_wallet + points_ledger (débito) + user_inventory
-  -> cross_system_transactions + inventory_ledger_events (hash-chain)
-
-IMPORTANTE: el voto MVP acredita spv_users.points_balance, pero la compra debita points_wallet.
-No existe un puente demostrado entre ambos saldos ni una vista de inventario en src/; no presentar
-los puntos ganados por voto como saldo disponible para comprar hasta reconciliar identidades/saldos.
+Dominio (origen) -> actividades vinculadas -> actividad registrada -> voto/monitoreo
+  -> fórmula de conversión (votos locales/globales + tiempo validado) -> puntos
 ```
+
+La demo define los vínculos en `SIMULATION_DOMAIN_LINKS` (`src/SPVSystem.tsx`): Panadería → Panadero/Vendedor/Limpieza; Restaurante → Cocinero/Mesero/Limpieza; Peluquería → Peluquero/Recepcionista/Limpieza. La relación es de demostración y aún no está persistida en backend.
+
+El dashboard MVP llama `/api/spv/vote` y acredita un reward fijo; el endpoint formal `/api/votes` aplica `point_rules` y `points_ledger`. No son aún una implementación única de la fórmula. Los votos sirven como insumo de conversión; no hay requisito documentado de usar votos para comprar.
 
 ## Puntos canónicos
 
@@ -53,8 +46,9 @@ los puntos ganados por voto como saldo disponible para comprar hasta reconciliar
 | `getSpvBootstrapState` | `GET /api/points/balance/:userId`, `/api/votes/count`, `/api/votes/limits` | Implementadas; requieren auth |
 | `castVote` | `POST /api/votes` | Implementada; requiere auth |
 | `transferPoints` | `POST /api/points/transfer` | Implementada; requiere auth |
-| `getUsers`, `getActivities`, `getTransactions`, `getTableData` | No se hallaron las rutas `/api/users`, `/api/activities`, `/api/transactions`, `/api/data/:tableName` en `backend/src/routes` | No implementadas en backend actual; algunos métodos degradan silenciosamente a mock/array vacío |
-| `createActivity`, `updateActivity`, `updateTransaction`, deletes y cancel transfer | No se hallaron rutas correspondientes en el backend actual | No implementadas; varias funciones retornan éxito/datos locales silenciosamente |
+| `getUsers`, `getActivities` | Helper llama `/api/users` y `/api/activities`; backend MVP expone `GET /api/spv/users` y `GET /api/spv/activities` | Hay rutas con otro prefijo; el helper no las consume y oculta errores con mocks/arrays vacíos |
+| `getTransactions`, `getTableData` | Llama `/api/transactions` y `/api/data/:tableName` | No se encontraron esas rutas; devuelve arrays vacíos al fallar |
+| `createActivity`, `updateActivity`, `updateTransaction`, deletes y cancel transfer | Llama rutas helper no coincidentes | No hay equivalencia verificada; CRUD crea respuestas locales o ignora errores |
 
 `neonClient.ts` alimenta el dashboard con `/api/spv/*`. No eliminar ni considerar operativo un endpoint de `spvApi` solo porque tenga un helper cliente; confirmar ruta y contrato en backend.
 
@@ -76,4 +70,4 @@ Existen `scripts/run_migrations.js`, `scripts/execute_migrations.js`, `scripts/m
 6. Toda nueva migración debe ser incremental, versionada y ejecutable una sola vez.
 7. Si una pieza legacy debe permanecer, documentar su motivo y prohibir nuevas dependencias.
 
-Última revisión: 2026-09-06.
+Última revisión: 2026-11-11.
