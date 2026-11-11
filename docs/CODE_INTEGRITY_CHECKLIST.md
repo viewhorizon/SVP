@@ -35,7 +35,10 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 ### 2. Frontend con propósito
 
 - [x] Actividades, puntos, historial, operaciones y Kanban tienen una función de producto identificable.
-- [x] Voto real conectado a Neon y propagado a saldo, historial, tarea y objetivo.
+- [~] Voto MVP actualiza `spv_users.points_balance`, historial, tarea y objetivo; no acredita `points_wallet`/`points_ledger`.
+- [x] Compra inventario debita `points_wallet`/`points_ledger` y registra inventario, cross-system transaction y hash-chain en una transacción.
+- [ ] Unificar o mapear identidades/saldos entre el voto MVP (`spv_users`) y el inventario (`points_wallet`); hasta entonces los puntos de voto no son saldo de compra demostrado.
+- [ ] Añadir interfaz frontend conectada a catálogo, inventario personal y compra; los endpoints API están presentes, no se encontraron consumidores UI.
 - [x] Inventory, CRM y E-commerce se modelan como dominios externos suscritos que originan actividades SVP.
 - [x] La simulación permite seleccionar la actividad puente y ejecutar el contrato real de voto.
 - [x] Health API muestra disponibilidad del backend y base de datos.

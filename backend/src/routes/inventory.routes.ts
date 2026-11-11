@@ -213,9 +213,6 @@ export function createInventoryRouter({ pool }: CreateInventoryRouterOptions) {
     const quantity = body.quantity ?? 1;
     const requestId = body.requestId ?? readIdempotencyKey(req.headers) ?? randomUUID();
 
-    if (body.toUserId === fromUserId) {
-      return res.status(400).json({ error: 'toUserId debe ser diferente del usuario origen' });
-    }
     const parkId = (body.parkId ?? '').trim() || null;
     const eventId = randomUUID();
 

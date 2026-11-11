@@ -9,14 +9,19 @@ Este documento es el mapa canónico para evitar duplicar agentes, scripts, contr
 ## Flujo principal
 
 ```text
-Actividad externa
-  -> src/SPVSystem.tsx
-  -> src/hooks/useSpv.ts
-  -> src/services/neonClient.ts
-  -> /api/spv/vote
-  -> backend/src/routes/spvMvp.routes.ts
-  -> PostgreSQL/Neon
-  -> saldo + historial + tarea + objetivo estratégico
+Actividad externa (voto MVP)
+  -> src/SPVSystem.tsx -> src/hooks/useSpv.ts -> src/services/neonClient.ts
+  -> /api/spv/vote -> backend/src/routes/spvMvp.routes.ts
+  -> spv_users.points_balance + spv_history + tarea + objetivo estratégico
+
+Compra desde inventario (flujo transaccional distinto)
+  -> /api/inventory/purchase -> backend/src/routes/inventory.routes.ts
+  -> points_wallet + points_ledger (débito) + user_inventory
+  -> cross_system_transactions + inventory_ledger_events (hash-chain)
+
+IMPORTANTE: el voto MVP acredita spv_users.points_balance, pero la compra debita points_wallet.
+No existe un puente demostrado entre ambos saldos ni una vista de inventario en src/; no presentar
+los puntos ganados por voto como saldo disponible para comprar hasta reconciliar identidades/saldos.
 ```
 
 ## Puntos canónicos
@@ -41,7 +46,17 @@ Actividad externa
 
 ### Clientes API
 
-`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos y llamadas parcialmente solapados, pero no son equivalentes: `spvApi.ts` representa el adaptador del contrato externo (`/api/votes`, `/api/points`, `/api/activities`, `/api/transactions`), mientras `neonClient.ts` alimenta la vista interna con `/api/spv/*`. No se descarta ni congela `spvApi.ts`; cualquier cambio debe preservar compatibilidad externa y pasar por revisión de contrato.
+`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos y llamadas parcialmente solapados, pero no son equivalentes. Evidencia de consumidores: `src/hooks/useSpv.ts` importa y llama `getSpvBootstrapState`, `getUsers`, `castVote`, `transferPoints` y `createActivity`; el camino de voto real también llama `neonClient.castVote`.
+
+| Funciones de spvApi | Rutas actuales | Clasificación |
+| --- | --- | --- |
+| `getSpvBootstrapState` | `GET /api/points/balance/:userId`, `/api/votes/count`, `/api/votes/limits` | Implementadas; requieren auth |
+| `castVote` | `POST /api/votes` | Implementada; requiere auth |
+| `transferPoints` | `POST /api/points/transfer` | Implementada; requiere auth |
+| `getUsers`, `getActivities`, `getTransactions`, `getTableData` | No se hallaron las rutas `/api/users`, `/api/activities`, `/api/transactions`, `/api/data/:tableName` en `backend/src/routes` | No implementadas en backend actual; algunos métodos degradan silenciosamente a mock/array vacío |
+| `createActivity`, `updateActivity`, `updateTransaction`, deletes y cancel transfer | No se hallaron rutas correspondientes en el backend actual | No implementadas; varias funciones retornan éxito/datos locales silenciosamente |
+
+`neonClient.ts` alimenta el dashboard con `/api/spv/*`. No eliminar ni considerar operativo un endpoint de `spvApi` solo porque tenga un helper cliente; confirmar ruta y contrato en backend.
 
 ### Migraciones
 
