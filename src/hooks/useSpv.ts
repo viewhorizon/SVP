@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { 
   castVote, 
   creditPoints, 
@@ -82,6 +82,8 @@ const saveHistoryToStorage = (history: HistoryEntry[]) => {
 
 export function useSpv() {
   const [dailyVotesLeft, setDailyVotesLeft] = useState(MAX_DAILY_VOTES);
+  const [isVoting, setIsVoting] = useState(false);
+  const voteInFlightRef = useRef(false);
   const [pointsAvailable, setPointsAvailable] = useState(42);
   const [totalPointsAccumulated, setTotalPointsAccumulated] = useState(1240);
   const [activities, setActivities] = useState(INITIAL_ACTIVITIES);
@@ -148,7 +150,7 @@ export function useSpv() {
           setUseNeon(true);
           setPointsAvailable(bootstrap.available);
           setTotalPointsAccumulated(bootstrap.historical);
-          setDailyVotesLeft(bootstrap.remainingVotes);
+          setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, bootstrap.remainingVotes)));
           setRegisteredUsers(neonUsers.map(u => ({
             id: u.id,
             username: u.username,
@@ -207,7 +209,7 @@ export function useSpv() {
         ]);
         setPointsAvailable(bootstrap.available);
         setTotalPointsAccumulated(bootstrap.historical);
-        setDailyVotesLeft(bootstrap.remainingVotes);
+        setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, bootstrap.remainingVotes)));
         setRegisteredUsers(users);
       } catch {
         // Fallback local con usuarios mock
@@ -263,7 +265,7 @@ export function useSpv() {
     return () => window.removeEventListener("spv:request", listener);
   }, []);
 
-  const todayVotesUsed = MAX_DAILY_VOTES - dailyVotesLeft;
+  const todayVotesUsed = Math.min(MAX_DAILY_VOTES, Math.max(0, MAX_DAILY_VOTES - dailyVotesLeft));
 
   const groupedActivities = useMemo(
     () => ({
@@ -312,17 +314,23 @@ export function useSpv() {
   }, []);
 
   // CREATE - Votar
-  const handleVote = useCallback(async (activityId: string, externalContext?: { domain: string; reference: string }) => {
+  const handleVote = useCallback(async (activityId: string, externalContext?: { domain: string; reference: string }): Promise<boolean> => {
+    if (voteInFlightRef.current) {
+      setMessage("Ya hay un voto en proceso.");
+      return false;
+    }
     if (dailyVotesLeft <= 0) {
       setMessage("No te quedan votos hoy.");
-      return;
+      return false;
     }
     const activity = activities.find((entry) => entry.id === activityId);
-    if (!activity) return;
+    if (!activity) return false;
 
+    voteInFlightRef.current = true;
+    setIsVoting(true);
     try {
       const result = await castVote(activityId, buildId(), activity.type, externalContext);
-      setDailyVotesLeft(result.remainingVotes);
+      setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, result.remainingVotes)));
       setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
       setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
       setRegisteredUsers((prev) => prev.map((user) => user.id === DEMO_USER_ID
@@ -336,14 +344,24 @@ export function useSpv() {
       } else {
         setMessage("Voto registrado.");
       }
-    } catch {
-      const localPoints = Math.max(1, Math.round(activity.pointsPerHour * 2));
-      setDailyVotesLeft((prev) => prev - 1);
-      setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + localPoints));
-      setTotalPointsAccumulated((prev) => prev + localPoints);
-      setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
-      addHistory(`Voto ${activity.type} en ${activity.name} (+${localPoints} pts)`, "vote", localPoints);
-      setMessage("Voto registrado en modo local.");
+      return true;
+    } catch (error) {
+      const apiError = error && typeof error === "object"
+        ? error as { status?: number; payload?: { limits?: { remainingVotes?: unknown } } }
+        : {};
+      if (apiError.status === 429) {
+        const remainingVotes = Number(apiError.payload?.limits?.remainingVotes ?? 0);
+        setDailyVotesLeft(Number.isFinite(remainingVotes)
+          ? Math.max(0, Math.min(MAX_DAILY_VOTES, remainingVotes))
+          : 0);
+        setMessage("Has alcanzado el límite diario de votos. No se registró otro voto.");
+      } else {
+        setMessage("No se pudo registrar el voto. No se actualizaron el contador ni los puntos.");
+      }
+      return false;
+    } finally {
+      voteInFlightRef.current = false;
+      setIsVoting(false);
     }
   }, [dailyVotesLeft, activities, addHistory, applyImpact]);
 
@@ -446,6 +464,7 @@ export function useSpv() {
       activities,
       amount,
       dailyVotesLeft,
+      isVoting,
       groupedActivities,
       healthLabel,
       healthState,

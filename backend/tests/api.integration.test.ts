@@ -86,6 +86,33 @@ describe('SPV API integration', () => {
     expect(countResponse.body.votesToday).toBe(1);
   });
 
+  it('blocks a sixth daily vote and keeps the count at the configured limit', async () => {
+    const app = createTestApp();
+    const headers = { Authorization: `Bearer dev:${USER_A}` };
+
+    for (let index = 1; index <= 5; index += 1) {
+      const requestId = `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, '0')}`;
+      const response = await request(app)
+        .post('/api/svp/votes')
+        .set(headers)
+        .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId });
+      expect(response.status).toBe(201);
+    }
+
+    const sixthVote = await request(app)
+      .post('/api/svp/votes')
+      .set(headers)
+      .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000006' });
+    const count = await request(app)
+      .get('/api/svp/votes/count')
+      .set(headers);
+
+    expect(sixthVote.status).toBe(429);
+    expect(sixthVote.body.limits.remainingVotes).toBe(0);
+    expect(count.status).toBe(200);
+    expect(count.body.votesToday).toBe(5);
+  });
+
   it('test-04: e2e vote -> transfer -> balances', async () => {
     const app = createTestApp();
 

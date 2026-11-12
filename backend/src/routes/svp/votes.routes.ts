@@ -57,6 +57,12 @@ export function createVotesRouter({ pool }: CreateVotesRouterOptions) {
 
     try {
       const payload = await withTransaction(pool, async (client) => {
+        // Serialize per-user vote transactions so concurrent requests cannot both pass the daily limit.
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtext('svp-votes'), hashtext($1))`,
+          [userId]
+        );
+
         const idempotentCheck = await client.query(
           `SELECT ledger_id, balance_after
            FROM points_ledger

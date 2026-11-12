@@ -16,7 +16,7 @@ type TabId = "activities" | "inventory" | "points" | "history" | "operations";
 
 interface SimulationEvent {
   id: string;
-  type: "vote" | "transfer" | "credit" | "integration" | "system";
+  type: "vote" | "transfer" | "credit" | "integration" | "simulation" | "system";
   description: string;
   timestamp: string;
   status: "success" | "pending" | "error";
@@ -24,6 +24,7 @@ interface SimulationEvent {
 }
 
 const SIMULATION_DOMAIN_LINKS = [
+  { id: "inventory", label: "Inventario externo (simulado)", activities: [] },
   { id: "panaderia", label: "Panadería", activities: ["Panadero", "Vendedor", "Limpieza"] },
   { id: "restaurante", label: "Restaurante", activities: ["Cocinero", "Mesero", "Limpieza"] },
   { id: "peluqueria", label: "Peluquería", activities: ["Peluquero", "Recepcionista", "Limpieza"] },
@@ -107,7 +108,7 @@ export default function SPVSystem() {
   const [activeTab, setActiveTab] = useState<TabId>("activities");
   const [simulationMode, setSimulationMode] = useState(false);
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
-  const [selectedOriginId, setSelectedOriginId] = useState<string>("panaderia");
+  const [selectedOriginId, setSelectedOriginId] = useState<string>("inventory");
   const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
   const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
@@ -127,6 +128,7 @@ export default function SPVSystem() {
     healthLabel,
     healthState,
     history,
+    isVoting,
     lastRequestId,
     message,
     pointsAvailable,
@@ -139,6 +141,7 @@ export default function SPVSystem() {
 
   const selectedOrigin = SIMULATION_DOMAIN_LINKS.find((origin) => origin.id === selectedOriginId) ?? SIMULATION_DOMAIN_LINKS[0];
   const activitiesForSelectedOrigin = useMemo(() => {
+    if (selectedOrigin.id === "inventory") return activities;
     const linkedNames = new Set(selectedOrigin.activities.map(normalizeActivityName));
     return activities.filter((activity) => linkedNames.has(normalizeActivityName(activity.name)));
   }, [activities, selectedOrigin]);
@@ -181,15 +184,17 @@ export default function SPVSystem() {
 
   const handleVoteWithSimulation = async (activityId: string) => {
     const activity = [...groupedActivities.global, ...groupedActivities.local].find((a) => a.id === activityId);
+    const registered = await actions.handleVote(activityId);
     if (simulationMode && activity) {
       addSimulationEvent({
-        type: "vote",
-        description: `Voto en "${activity.name}"`,
-        status: "success",
-        details: `+${Math.round(activity.pointsPerHour * 2)} pts otorgados`,
+        type: registered ? "vote" : "system",
+        description: registered ? `Voto en "${activity.name}"` : `Voto no registrado: "${activity.name}"`,
+        status: registered ? "success" : "error",
+        details: registered
+          ? `+${Math.round(activity.pointsPerHour * 2)} pts otorgados`
+          : "El backend SVP no confirmó el voto; no se actualizaron los puntos.",
       });
     }
-    await actions.handleVote(activityId);
   };
 
   const handleTransferWithSimulation = async () => {
@@ -218,9 +223,9 @@ export default function SPVSystem() {
   const externalSource = selectedOrigin.id;
   if (!selectedSimulationActivity) {
   addSimulationEvent({
-  description: "Actividad vinculada requerida",
-  type: "integration",
-  details: "Selecciona una actividad registrada para el dominio elegido antes de simular",
+  description: "Actividad SVP requerida para la simulación",
+  type: "simulation",
+  details: "Selecciona una actividad registrada; no se establece conexión externa.",
   status: "error",
   });
   return;
@@ -230,36 +235,31 @@ export default function SPVSystem() {
     const activity = activities.find((entry) => entry.id === simulationActivityId);
     if (!activity) {
       addSimulationEvent({
-        description: `Actividad externa de ${externalSource} no disponible`,
-        type: "integration",
-        details: "Carga las actividades suscritas al SVP antes de simular",
+        description: `Actividad SVP para ${externalSource} no disponible`,
+        type: "simulation",
+        details: "No hay una actividad registrada para esta simulación; no se estableció conexión externa.",
         status: "error",
       });
       return;
     }
 
-    addSimulationEvent({
-        description: `Actividad externa recibida desde ${selectedOrigin.label}`,
-        type: "integration",
-      details: `${selectedOrigin.label} → ${activity.name} · vínculo registrado`,
-      status: "pending",
-    });
-
     try {
-  await actions.handleVote(activity.id, {
-    domain: externalSource,
-    reference: `${externalSource}:${activity.id}:${Date.now()}`,
+      const registered = await actions.handleVote(activity.id, {
+        domain: externalSource,
+        reference: `${externalSource}:${activity.id}:${Date.now()}`,
       });
       addSimulationEvent({
-        description: `Voto registrado: ${activity.name}`,
-        type: "vote",
-        details: `${selectedOrigin.label} → ${activity.name}; puntos calculados por las reglas activas.`,
-        status: "success",
+        description: registered ? `Simulación aceptada por SVP: ${activity.name}` : `Simulación rechazada por SVP: ${activity.name}`,
+        type: "simulation",
+        details: registered
+          ? `${selectedOrigin.label} → ${activity.name}; el contrato SVP aceptó el voto. No se sincroniza inventario externo.`
+          : "El backend SVP no confirmó el voto; no se actualizaron los puntos ni se sincronizó inventario externo.",
+        status: registered ? "success" : "error",
       });
     } catch (error) {
       addSimulationEvent({
-        description: `No se pudo registrar el voto de ${activity.name}`,
-        type: "system",
+        description: `Simulación no completada para ${activity.name}`,
+        type: "simulation",
         details: error instanceof Error ? error.message : "El controlador rechazó el contrato",
         status: "error",
       });
@@ -268,7 +268,8 @@ export default function SPVSystem() {
 
   const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode; description: string }> = [
     { id: "activities", label: "Actividades", icon: <Vote size={16} />, description: "Votar y gestionar actividades" },
-    { id: "inventory", label: "Inventario", icon: <Package size={16} />, description: "Consultar y comprar objetos con puntos SVP" },
+    { id: "inventory", label: "Inventario", icon: <Package size={16} />, description: "Estado de conexión con inventario externo" },
+
     { id: "points", label: "Puntos", icon: <Coins size={16} />, description: "Transferir y recibir puntos" },
     { id: "history", label: "Historial", icon: <History size={16} />, description: "Ver transacciones y eventos" },
     { id: "operations", label: "Operaciones", icon: <Settings size={16} />, description: "Herramientas y monitoreo" },
@@ -346,7 +347,7 @@ export default function SPVSystem() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="inline-flex items-center gap-2 text-sm text-slate-500"><Vote size={16} /> Votos de hoy</p>
-          <p className="text-2xl font-bold">{todayVotesUsed}<span className="text-base text-slate-500"> / {constants.MAX_DAILY_VOTES}</span></p>
+          <p className="text-2xl font-bold"><span data-testid="today-votes-count">{todayVotesUsed}</span><span className="text-base text-slate-500"> / {constants.MAX_DAILY_VOTES}</span></p>
           <div className="mt-2 h-1.5 rounded-full bg-slate-100">
             <div className="h-1.5 rounded-full bg-blue-600 transition-all" style={{ width: `${(todayVotesUsed / constants.MAX_DAILY_VOTES) * 100}%` }} />
           </div>
@@ -415,20 +416,20 @@ export default function SPVSystem() {
       {/* Panel de eventos de simulacion en tiempo real */}
       {simulationMode && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="mb-3 flex justify-end text-amber-800">
+          <div className="mb-3 flex items-center justify-between gap-2 text-amber-800">
+            <span className="rounded-full border border-amber-300 bg-white/70 px-3 py-1 text-xs font-semibold">
+              Simulación SVP · plataforma externa sin conexión
+            </span>
             <InfoPopover label="Información sobre la simulación">
-              Un dominio es un origen registrado, como una empresa o local. Por ejemplo: Panadería se vincula con Panadero, Vendedor y Limpieza. Solo las actividades vinculadas al dominio seleccionado deben aparecer aquí.
+              El origen seleccionado es una etiqueta de prueba, no una conexión externa. Para Inventario externo (simulado), elige una actividad SVP registrada y prueba el contrato de votos. El sistema no consulta ni sincroniza artículos, existencias ni objetos de la plataforma de inventario.
             </InfoPopover>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-  <div className="flex items-center gap-2">
-  <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
-  <Activity size={16} /> Simulación de contrato SVP
-  </p>
-  <InfoPopover label="Información sobre dominio y actividad">
-  El dominio es el origen registrado. Una Panadería puede vincular Panadero, Vendedor y Limpieza. Las actividades globales pueden recibir votos, pero el monitoreo y la validación de tiempo se realizan por usuario y local.
-  </InfoPopover>
-  </div>
+            <div className="flex items-center gap-2">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
+                <Activity size={16} /> Simulación de contrato SVP
+              </p>
+            </div>
             <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto">
               <select
                 value={selectedOriginId}
@@ -451,28 +452,34 @@ export default function SPVSystem() {
                 aria-label={`Actividad vinculada a ${selectedOrigin.label}`}
               >
                 <option value="">Seleccionar actividad</option>
-                {selectedOrigin.activities.map((activityName) => {
-                  const registeredActivity = activitiesForSelectedOrigin.find(
-                    (activity) => normalizeActivityName(activity.name) === normalizeActivityName(activityName),
-                  );
-                  return (
-                    <option
-                      key={activityName}
-                      value={registeredActivity?.id ?? `unregistered:${activityName}`}
-                      disabled={!registeredActivity}
-                    >
-                      {activityName}{registeredActivity ? "" : " (no registrada)"}
+                {selectedOrigin.id === "inventory"
+                  ? activitiesForSelectedOrigin.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.name} ({activity.type === "global" ? "global" : "local"})
                     </option>
-                  );
-                })}
+                  ))
+                  : selectedOrigin.activities.map((activityName) => {
+                    const registeredActivity = activitiesForSelectedOrigin.find(
+                      (activity) => normalizeActivityName(activity.name) === normalizeActivityName(activityName),
+                    );
+                    return (
+                      <option
+                        key={activityName}
+                        value={registeredActivity?.id ?? `unregistered:${activityName}`}
+                        disabled={!registeredActivity}
+                      >
+                        {activityName}{registeredActivity ? "" : " (no registrada)"}
+                      </option>
+                    );
+                  })}
               </select>
               <button
                 type="button"
                 onClick={() => void simulateExternalEvent()}
-                disabled={!selectedSimulationActivity}
+                disabled={!selectedSimulationActivity || isVoting}
                 className="inline-flex items-center justify-center gap-1 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send size={14} /> Simular evento
+                <Send size={14} /> {isVoting ? "Registrando…" : "Simular evento"}
               </button>
               <button
                 type="button"
@@ -659,10 +666,10 @@ export default function SPVSystem() {
                 <button
                   type="button"
                   onClick={() => void handleVoteWithSimulation(activity.id)}
-                  disabled={todayVotesUsed >= constants.MAX_DAILY_VOTES}
+                  disabled={todayVotesUsed >= constants.MAX_DAILY_VOTES || isVoting}
                   className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  {todayVotesUsed >= constants.MAX_DAILY_VOTES ? "Sin votos disponibles" : "Votar"}
+                  {todayVotesUsed >= constants.MAX_DAILY_VOTES ? "Sin votos disponibles" : isVoting ? "Registrando…" : "Votar"}
                 </button>
               </article>
             ))}
@@ -670,7 +677,12 @@ export default function SPVSystem() {
         </div>
       )}
 
-      {activeTab === "inventory" && <InventoryPanel />}
+      {activeTab === "inventory" && (
+        <InventoryPanel onOpenSimulation={() => {
+          setActiveTab("activities");
+          setSimulationMode(true);
+        }} />
+      )}
 
       {/* Contenido de pestana: Puntos */}
       {activeTab === "points" && (
