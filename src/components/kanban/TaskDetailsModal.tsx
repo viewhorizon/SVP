@@ -1,5 +1,5 @@
 import { priorityStyles, type Task } from "../../services/kanbanService";
-import { CheckCircle2, Link2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Link2, AlertTriangle, X } from "lucide-react";
 
 interface TaskDetailsModalProps {
   task: Task | null;
@@ -10,16 +10,31 @@ export function TaskDetailsModal({ task, onClose }: TaskDetailsModalProps) {
   if (!task) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl md:p-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-details-title"
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl md:p-5"
+      >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{task.title}</h3>
+            <h3 id="task-details-title" className="text-lg font-bold text-slate-900">{task.title}</h3>
             <p className="text-xs text-slate-600">ID: {task.id}</p>
           </div>
-          <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold uppercase ${priorityStyles[task.priority]}`}>
-            {task.priority}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`rounded-full px-2 py-1 text-xs font-semibold uppercase ${priorityStyles[task.priority]}`}>
+              {task.priority}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar detalles de la tarea"
+              className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2 text-sm text-slate-700">

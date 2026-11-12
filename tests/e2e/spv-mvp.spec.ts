@@ -13,6 +13,15 @@ test.describe('SVP MVP', () => {
     await expect(page.getByText('Actividades Disponibles')).toBeVisible();
   });
 
+  test('opens centered information dialog and closes it with the X control', async ({ page }) => {
+    await page.getByRole('button', { name: 'Información sobre el cálculo de puntos' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Información sobre el cálculo de puntos' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cerrar información' }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test('switches across the primary tabs', async ({ page }) => {
     await page.getByRole('button', { name: /Puntos/ }).click();
     await expect(page.getByText('Transferir Puntos')).toBeVisible();
@@ -22,16 +31,6 @@ test.describe('SVP MVP', () => {
 
     await page.getByRole('button', { name: /Operaciones/ }).click();
     await expect(page.getByText('Centro de Operaciones')).toBeVisible();
-  });
-
-  test('searches and filters glossary terms', async ({ page }) => {
-    await page.getByRole('button', { name: /Glosario/ }).click();
-    await expect(page.getByRole('heading', { name: 'Glosario del sistema' })).toBeVisible();
-    await expect(page.getByText('point_rules', { exact: true })).toBeVisible();
-
-    await page.getByLabel('Buscar en el glosario').fill('idempotencia');
-    await expect(page.getByText('Idempotencia', { exact: true })).toBeVisible();
-    await expect(page.getByText('point_rules', { exact: true })).toHaveCount(0);
   });
 
   test('loads the history tab without crashing when backend is unavailable', async ({ page }) => {

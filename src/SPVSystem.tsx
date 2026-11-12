@@ -1,18 +1,17 @@
 import { 
-  Activity, BookOpen, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download,
-  Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
-  Search, Table, Copy, Check, Info
+  Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download,
+  Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2,
+  Search, Table, Copy, Check, Info, X
 } from "lucide-react";
-import { useState, useMemo, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSpv } from "./hooks/useSpv";
 import { DeadLetterPanel } from "./components/Sprint3/DeadLetterPanel";
 import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
 import { LoadTestPanel } from "./components/Sprint3/LoadTestPanel";
 import { ReconciliationPanel } from "./components/Sprint3/ReconciliationPanel";
 import { ImpactNotifications } from "./components/ImpactNotifications";
-import Glossary from "./components/Glossary";
 
-type TabId = "activities" | "points" | "history" | "operations" | "glossary";
+type TabId = "activities" | "points" | "history" | "operations";
 
 interface SimulationEvent {
   id: string;
@@ -34,23 +33,72 @@ const normalizeActivityName = (name: string) =>
 
 function InfoPopover({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const titleId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  function close() {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    dialogRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   return (
-    <span className="relative inline-flex">
+    <>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(true)}
         aria-label={label}
+        aria-haspopup="dialog"
         aria-expanded={open}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-current/30 text-current hover:bg-black/5"
       >
         <Info size={16} />
       </button>
       {open && (
-        <span role="tooltip" className="absolute right-0 top-9 z-30 w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 text-left text-xs leading-5 text-slate-700 shadow-lg">
-          {children}
-        </span>
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) close();
+          }}
+        >
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white text-left text-sm leading-6 text-slate-700 shadow-2xl outline-none"
+          >
+            <div className="sticky top-0 flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+              <h2 id={titleId} className="font-semibold text-slate-900">{label}</h2>
+              <button
+                type="button"
+                onClick={close}
+                aria-label="Cerrar información"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                <X aria-hidden="true" size={18} />
+              </button>
+            </div>
+            <div className="p-5">{children}</div>
+          </div>
+        </div>
       )}
-    </span>
+    </>
   );
 }
 
@@ -221,7 +269,6 @@ export default function SPVSystem() {
     { id: "activities", label: "Actividades", icon: <Vote size={16} />, description: "Votar y gestionar actividades" },
     { id: "points", label: "Puntos", icon: <Coins size={16} />, description: "Transferir y recibir puntos" },
     { id: "history", label: "Historial", icon: <History size={16} />, description: "Ver transacciones y eventos" },
-    { id: "glossary", label: "Glosario", icon: <BookOpen size={16} />, description: "Consultar términos del sistema" },
     { id: "operations", label: "Operaciones", icon: <Settings size={16} />, description: "Herramientas y monitoreo" },
   ];
 
@@ -937,9 +984,6 @@ export default function SPVSystem() {
           )}
         </div>
       )}
-
-      {/* Contenido de pestana: Glosario */}
-      {activeTab === "glossary" && <Glossary />}
 
       {/* Contenido de pestana: Operaciones */}
       {activeTab === "operations" && (
