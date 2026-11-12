@@ -1,5 +1,5 @@
 import { 
-  Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download, 
+  Activity, BookOpen, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download,
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2, 
   Search, Table, Copy, Check, Info
 } from "lucide-react";
@@ -10,8 +10,9 @@ import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
 import { LoadTestPanel } from "./components/Sprint3/LoadTestPanel";
 import { ReconciliationPanel } from "./components/Sprint3/ReconciliationPanel";
 import { ImpactNotifications } from "./components/ImpactNotifications";
+import Glossary from "./components/Glossary";
 
-type TabId = "activities" | "points" | "history" | "operations";
+type TabId = "activities" | "points" | "history" | "operations" | "glossary";
 
 interface SimulationEvent {
   id: string;
@@ -220,6 +221,7 @@ export default function SPVSystem() {
     { id: "activities", label: "Actividades", icon: <Vote size={16} />, description: "Votar y gestionar actividades" },
     { id: "points", label: "Puntos", icon: <Coins size={16} />, description: "Transferir y recibir puntos" },
     { id: "history", label: "Historial", icon: <History size={16} />, description: "Ver transacciones y eventos" },
+    { id: "glossary", label: "Glosario", icon: <BookOpen size={16} />, description: "Consultar términos del sistema" },
     { id: "operations", label: "Operaciones", icon: <Settings size={16} />, description: "Herramientas y monitoreo" },
   ];
 
@@ -935,6 +937,9 @@ export default function SPVSystem() {
           )}
         </div>
       )}
+
+      {/* Contenido de pestana: Glosario */}
+      {activeTab === "glossary" && <Glossary />}
 
       {/* Contenido de pestana: Operaciones */}
       {activeTab === "operations" && (

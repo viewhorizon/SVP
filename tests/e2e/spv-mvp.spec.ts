@@ -24,6 +24,16 @@ test.describe('SVP MVP', () => {
     await expect(page.getByText('Centro de Operaciones')).toBeVisible();
   });
 
+  test('searches and filters glossary terms', async ({ page }) => {
+    await page.getByRole('button', { name: /Glosario/ }).click();
+    await expect(page.getByRole('heading', { name: 'Glosario del sistema' })).toBeVisible();
+    await expect(page.getByText('point_rules', { exact: true })).toBeVisible();
+
+    await page.getByLabel('Buscar en el glosario').fill('idempotencia');
+    await expect(page.getByText('Idempotencia', { exact: true })).toBeVisible();
+    await expect(page.getByText('point_rules', { exact: true })).toHaveCount(0);
+  });
+
   test('loads the history tab without crashing when backend is unavailable', async ({ page }) => {
     await page.getByRole('button', { name: /Historial/ }).click();
     await expect(page.getByText('Historial de Transacciones')).toBeVisible();
