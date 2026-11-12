@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { createVotesRouter } from '../src/routes/votes.routes';
+import { createVotesRouter } from '../src/routes/svp/votes.routes';
 import { createPointsRouter } from '../src/routes/points.routes';
 import { createFakeSpvPool } from './helpers/fakeSpvPool';
 import { clearWebhookReplayGuardForTests } from '../src/services/webhookReplayGuard';
@@ -17,7 +17,7 @@ function createTestApp() {
   app.use(express.json());
 
   const fakePool = createFakeSpvPool() as unknown as Pool;
-  app.use('/api', createVotesRouter({ pool: fakePool }));
+  app.use('/api/svp', createVotesRouter({ pool: fakePool }));
   app.use('/api', createPointsRouter({ pool: fakePool }));
 
   return app;
@@ -33,11 +33,36 @@ describe('SPV API integration', () => {
     delete process.env.WEBHOOK_HMAC_TOLERANCE_SECONDS;
   });
 
+  it('requires auth at the canonical vote route and retires the old route', async () => {
+    const app = createTestApp();
+
+    const unauthenticated = await request(app)
+      .post('/api/svp/votes')
+      .send({ activityId: ACTIVITY_A, activityScope: 'local' });
+    const oldRoute = await request(app)
+      .post('/api/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: ACTIVITY_A, activityScope: 'local' });
+
+    expect(unauthenticated.status).toBe(401);
+    expect(oldRoute.status).toBe(404);
+  });
+
+  it('rejects activity IDs that do not match the PostgreSQL UUID contract', async () => {
+    const app = createTestApp();
+    const response = await request(app)
+      .post('/api/svp/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: 'act-demo', activityScope: 'local' });
+
+    expect(response.status).toBe(400);
+  });
+
   it('test-03: vote endpoint updates points balance and daily count', async () => {
     const app = createTestApp();
 
     const voteResponse = await request(app)
-      .post('/api/votes')
+      .post('/api/svp/votes')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
 
@@ -53,7 +78,7 @@ describe('SPV API integration', () => {
     expect(balanceResponse.body.available).toBe(voteResponse.body.pointsGranted);
 
     const countResponse = await request(app)
-      .get('/api/votes/count')
+      .get('/api/svp/votes/count')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .query({ activityId: ACTIVITY_A });
 
@@ -65,7 +90,7 @@ describe('SPV API integration', () => {
     const app = createTestApp();
 
     const voteResponse = await request(app)
-      .post('/api/votes')
+      .post('/api/svp/votes')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
 
@@ -233,7 +258,7 @@ describe('SPV API integration', () => {
     const app = createTestApp();
 
     const response = await request(app)
-      .post('/api/votes')
+      .post('/api/svp/votes')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .send({ activityId: ACTIVITY_A, activityScope: 'invalid-scope' });
 

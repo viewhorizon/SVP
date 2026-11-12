@@ -66,7 +66,7 @@
 ## Proximos pasos sugeridos GLM
 
 1. Middleware Firebase Admin real para produccion (completado con `AUTH_MODE=firebase` + fallback controlado).
-2. Rate limiting para endpoints de votos (completado en `POST /api/votes`).
+2. Rate limiting para endpoints de votos (completado en `POST /api/svp/votes`).
 3. Tests de atomicidad para `cross_system_transactions` (completado como script SQL manual).
 4. Contratos OpenAPI/Swagger (completado con `backend/openapi.yaml`).
 5. Pipeline CI/CD base (completado con `.github/workflows/ci.yml`).

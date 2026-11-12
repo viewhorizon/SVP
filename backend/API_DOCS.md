@@ -2,7 +2,7 @@
 
 Endpoints, reglas y convenciones para el backend SPV.
 
-- Votos API: `POST /api/votes`, `GET /api/votes/count`, `GET /api/votes/limits`
+- Votos API: `POST /api/svp/votes`, `GET /api/svp/votes/count`, `GET /api/svp/votes/limits`
 - Puntos API: `POST /api/points/credit`, `POST /api/points/debit`, `POST /api/points/transfer`, `POST /api/points/convert`, `POST /api/points/liveops/convert`, `GET /api/points/balance`, `GET /api/points/balance/:userId`
 - Inventario API: `GET /api/inventory/catalog`, `GET /api/inventory/me`, `POST /api/inventory/purchase`, `POST /api/inventory/lifecycle/transfer`, `POST /api/inventory/lifecycle/destroy`, `POST /api/inventory/lifecycle/transform`, `GET /api/inventory/ledger/verify`
 - Logros votados API: `GET /api/achievements`, `POST /api/achievements`, `POST /api/achievements/:achievementId/vote`, `POST /api/achievements/:achievementId/close`
@@ -18,6 +18,19 @@ Endpoints, reglas y convenciones para el backend SPV.
 - Auth modo `dev`: `Bearer dev:<uid>` cuando `AUTH_MODE=dev` o `AUTH_MODE=auto`
 - Auth modo Firebase real: `AUTH_MODE=firebase` + credenciales de servicio
 - Errores: `{ "error": "mensaje" }`
+
+## Migración del contrato de votos
+
+1. Usar `POST /api/svp/votes` (o `/api/v1/svp/votes`) y las lecturas `GET /api/svp/votes/count` y `GET /api/svp/votes/limits`.
+2. Enviar `Authorization: Bearer <token>`, `activityId` (UUID de una actividad), `activityScope`, `requestId` y, opcionalmente, `metadata`. El usuario se deriva del token; el cliente no debe enviar `userId` ni `points`. `requestId` y `eventId` pueden ser claves externas: se normalizan de forma determinista a UUID para PostgreSQL.
+3. Actualizar clientes web, móviles e integraciones externas a la ruta nueva. El dashboard usa `requestJSON`, que adjunta el token existente.
+4. Desplegar API y cliente interno juntos. Coordinar la actualización de integraciones externas antes de desplegar, porque las rutas antiguas `/api/votes` y `/api/spv/vote` ya no se registran.
+5. Antes del despliegue, verificar que existan `point_rules`, `point_limits`, `points_wallet`, `points_ledger` y `votes`; para actividad/progreso MVP también se requieren `spv_activities`, `spv_history`, `spv_tasks` y `spv_strategic_items`.
+6. Comprobar que el ID del token sea UUID y que esté alineado con las tablas de puntos. `spv_history.user_id` referencia `spv_users.id`; el historial heredado solo se escribe cuando existe esa correspondencia.
+7. Validar el voto, saldo, historial y avance de tarea con una base de prueba antes de desplegar.
+
+El Neon conectado tenía solo tablas `spv_*`. Preparé en una rama temporal las tablas de puntos/votos, las reglas y límites iniciales, y un backfill de `spv_users.points_balance` a `points_wallet`/`points_ledger`; validé el esquema y las reglas en esa rama. No se ha aplicado a la rama principal: requiere aprobación explícita. No desplegar la ruta hasta aplicar la migración. La ruta incrementa `votes_count`, registra voto/ledger y propaga progreso vinculado en una transacción.
+
 - DB principal: `points_wallet`, `points_ledger`, `votes`, `point_rules`, `point_limits`, `inventory_catalog`, `user_inventory`, `liveops_rates`, `cross_system_transactions`
 - DB integracion externa: `identity_links`, `source_app_rates`, `external_activity_events`
 - DB logros votados: `achievement_definitions`, `achievement_votes`
@@ -29,10 +42,10 @@ Endpoints, reglas y convenciones para el backend SPV.
 - Rate limit de votos en memoria por usuario/IP:
   - `VOTES_RATE_LIMIT_WINDOW_MS` (default `60000`)
   - `VOTES_RATE_LIMIT_MAX` (default `30`)
-  - Aplica en `POST /api/votes`
+  - Aplica en `POST /api/svp/votes`
 - Cache de lectura en memoria para votos:
   - `VOTES_CACHE_TTL_SECONDS` (default `20`)
-  - Aplica en `GET /api/votes/count` y `GET /api/votes/limits`
+  - Aplica en `GET /api/svp/votes/count` y `GET /api/svp/votes/limits`
   - Respuesta incluye `cached: true|false`
 - Contrato OpenAPI base en `backend/openapi.yaml`.
 - Script de prueba manual de atomicidad en `backend/sql/test_cross_system_transactions_atomicity.sql`.

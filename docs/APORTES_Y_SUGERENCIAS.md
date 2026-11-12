@@ -12,7 +12,7 @@ Votos -> Puntos <- Actividades -> Inventario
 
 ## API sugerida
 
-- `/api/votes`
+- `/api/svp/votes`
 - `/api/points`
 - `/api/inventory`
 - `/api/activities`

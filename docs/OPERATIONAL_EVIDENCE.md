@@ -8,8 +8,8 @@ Votos no son compras. La demo tiene relaciones configuradas en `SIMULATION_DOMAI
 
 ## Implementación a distinguir
 
-- Dashboard: `src/hooks/useSpv.ts` llama `src/services/neonClient.ts` y `POST /api/spv/vote`. Esa ruta MVP registra el voto y acredita un reward fijo; no representa la fórmula de conversión final.
-- Contrato formal: `POST /api/votes` (`backend/src/routes/votes.routes.ts`) usa `point_rules` y `points_ledger`.
+- Dashboard e integraciones: `src/hooks/useSpv.ts` llama `POST /api/svp/votes` mediante `src/services/spvApi.ts`, que adjunta el Bearer token.
+- Contrato único: `backend/src/routes/svp/votes.routes.ts` calcula puntos con `point_rules`, persiste `votes`/`points_ledger` y, cuando la actividad MVP existe, registra historial y progreso de tarea dentro de la misma transacción.
 - Tiempo y evidencia laboral: no está completo de extremo a extremo.
 - Inventario: rutas independientes; no se deriva de ello un requisito de compra con puntos.
 

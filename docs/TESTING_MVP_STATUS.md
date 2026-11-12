@@ -49,7 +49,7 @@ Reporte real más reciente ejecutado el 2026-09-06 con `npm run test:coverage`: 
 
 ### Prioridad alta
 
-- Rutas nuevas: `GET /api/spv/activities`, `GET /api/spv/strategic`, `GET /api/spv/tasks`, `POST /api/spv/vote`.
+- Rutas nuevas: `GET /api/spv/activities`, `GET /api/spv/strategic`, `GET /api/spv/tasks`, `POST /api/svp/votes`.
 - Propagación de progreso: voto → tarea vinculada; tarea → objetivo estratégico; límite máximo de 100%; estados `in-progress` y `done`.
 - Transacciones y rollback cuando falla una operación.
 - Lectura real desde Neon con datos semilla.

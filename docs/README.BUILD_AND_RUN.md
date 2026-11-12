@@ -21,7 +21,7 @@ Variables sugeridas en `.env.example`:
 - `AUTH_MODE=dev` para local rapido (`Bearer dev:<uid>`)
 - `AUTH_MODE=firebase` para verificar JWT con Firebase Admin
 - `VOTES_RATE_LIMIT_WINDOW_MS` y `VOTES_RATE_LIMIT_MAX` para anti abuso
-- `VOTES_CACHE_TTL_SECONDS` para cache de lectura en `GET /api/votes/count` y `GET /api/votes/limits`
+- `VOTES_CACHE_TTL_SECONDS` para cache de lectura en `GET /api/svp/votes/count` y `GET /api/svp/votes/limits`
 - `PLANNING_AI_MODE=local` para analisis local sin proveedor externo
 - `PLANNING_AI_MODE=openai_compatible` para usar proveedor tipo OpenAI
 - Si usas `openai_compatible`: definir `PLANNING_AI_BASE_URL`, `PLANNING_AI_API_KEY`, `PLANNING_AI_MODEL`

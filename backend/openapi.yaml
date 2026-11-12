@@ -12,7 +12,7 @@ paths:
       responses:
         '200':
           description: Servicio activo
-  /api/votes:
+  /api/svp/votes:
     post:
       summary: Registrar voto y acreditar puntos
       security:
@@ -41,7 +41,7 @@ paths:
           description: Voto procesado
         '429':
           description: Limite de votos o rate limit excedido
-  /api/votes/count:
+  /api/svp/votes/count:
     get:
       summary: Contar votos del dia
       security:
@@ -54,7 +54,7 @@ paths:
       responses:
         '200':
           description: Conteo de votos
-  /api/votes/limits:
+  /api/svp/votes/limits:
     get:
       summary: Consultar limites diarios de votos
       security:

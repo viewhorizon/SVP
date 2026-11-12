@@ -12,7 +12,7 @@ Este backlog separa trabajo verificable por el sistema de trabajo que debe ejecu
 ## Sprint 5 — Contrato API y datos reales
 
 - [ ] Levantar el backend Express en el entorno de desarrollo y validar `GET /health`.
-- [ ] Validar `GET /api/spv/activities`, `POST /api/spv/vote` y `GET /api/spv/history` contra Neon.
+- [ ] Validar `GET /api/spv/activities`, `POST /api/svp/votes` y `GET /api/spv/history` contra Neon.
 - [ ] Registrar errores de base de datos con request ID y respuesta segura.
 - [ ] Añadir pruebas de integración para límite diario de 5 votos y respuesta HTTP 429.
 

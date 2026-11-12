@@ -137,20 +137,23 @@ export function useSpv() {
       setIsLoading(true);
       try {
         // Intentar cargar desde Neon primero
-        const [neonUsers, neonActivities, neonHistory] = await Promise.all([
+        const [neonUsers, neonActivities, neonHistory, bootstrap] = await Promise.all([
           neonClient.fetchUsers(),
           neonClient.fetchActivities(),
           neonClient.fetchHistory(),
+          getSpvBootstrapState(DEMO_USER_ID),
         ]);
 
         if (neonUsers.length > 0) {
           setUseNeon(true);
-          // Convertir usuarios de Neon al formato User
+          setPointsAvailable(bootstrap.available);
+          setTotalPointsAccumulated(bootstrap.historical);
+          setDailyVotesLeft(bootstrap.remainingVotes);
           setRegisteredUsers(neonUsers.map(u => ({
             id: u.id,
             username: u.username,
             displayName: u.name,
-            pointsBalance: u.points_balance,
+            pointsBalance: u.id === DEMO_USER_ID ? bootstrap.available : u.points_balance,
           })));
 
           // Cargar trazabilidad: items estrategicos y tareas
@@ -317,38 +320,22 @@ export function useSpv() {
     const activity = activities.find((entry) => entry.id === activityId);
     if (!activity) return;
 
-    // Camino Neon: captura impacto de trazabilidad
-    if (useNeon) {
-      try {
-        const result = await neonClient.castVote(activityId, DEMO_USER_ID, externalContext);
-        if (result.success) {
-          setDailyVotesLeft((prev) => prev - 1);
-          setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
-          setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
-          setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
-          addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`, "vote", result.pointsGranted);
-          if (result.impact) {
-            applyImpact(result.impact);
-            setMessage(`Voto registrado. Tarea "${result.impact.taskTitle}" avanzo a ${result.impact.taskProgress}%.`);
-          } else {
-            setMessage("Voto registrado.");
-          }
-          return;
-        }
-      } catch (err) {
-        console.log("[v0] Neon vote failed, fallback local:", err);
-      }
-    }
-
-    // Camino API/local original
     try {
-      const result = await castVote(activityId, buildId());
+      const result = await castVote(activityId, buildId(), activity.type, externalContext);
       setDailyVotesLeft(result.remainingVotes);
       setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
       setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
+      setRegisteredUsers((prev) => prev.map((user) => user.id === DEMO_USER_ID
+        ? { ...user, pointsBalance: user.pointsBalance + result.pointsGranted }
+        : user));
       setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
       addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`, "vote", result.pointsGranted);
-      setMessage("Voto registrado.");
+      if (result.impact) {
+        applyImpact(result.impact);
+        setMessage(`Voto registrado. Tarea "${result.impact.taskTitle}" avanzo a ${result.impact.taskProgress}%.`);
+      } else {
+        setMessage("Voto registrado.");
+      }
     } catch {
       const localPoints = Math.max(1, Math.round(activity.pointsPerHour * 2));
       setDailyVotesLeft((prev) => prev - 1);
@@ -358,7 +345,7 @@ export function useSpv() {
       addHistory(`Voto ${activity.type} en ${activity.name} (+${localPoints} pts)`, "vote", localPoints);
       setMessage("Voto registrado en modo local.");
     }
-  }, [dailyVotesLeft, activities, addHistory, useNeon, applyImpact]);
+  }, [dailyVotesLeft, activities, addHistory, applyImpact]);
 
   // CREATE - Transferir
   const handleTransfer = useCallback(async () => {

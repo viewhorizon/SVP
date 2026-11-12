@@ -18,8 +18,8 @@ Actualmente esas tres relaciones viven en `SIMULATION_DOMAIN_LINKS` de `src/SPVS
 
 ## Implementación existente y brechas
 
-- `POST /api/votes` en `backend/src/routes/votes.routes.ts` calcula el otorgamiento usando `point_rules` y registra votos/ledger.
-- El dashboard todavía usa `POST /api/spv/vote` en `backend/src/routes/spvMvp.routes.ts`; esa ruta acredita un reward fijo (10 por defecto) en `spv_users.points_balance`. No es la fórmula canónica y debe converger antes de considerarse cálculo productivo.
+- `POST /api/svp/votes` en `backend/src/routes/svp/votes.routes.ts` es el único endpoint de voto; calcula el otorgamiento con `point_rules`, registra votos/ledger y conserva historial y progreso de tareas vinculadas en una transacción.
+- El endpoint anterior `/api/spv/vote` y el antiguo montaje `/api/votes` fueron retirados; los clientes internos llaman la ruta canónica y los clientes externos deben actualizar su URL.
 - El monitoreo de sesiones/tiempo y su evidencia no está implementado de extremo a extremo.
 - Las rutas de inventario/wallet son independientes. No documentan ni autorizan compras con votos.
 

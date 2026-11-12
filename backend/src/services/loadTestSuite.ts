@@ -121,17 +121,16 @@ export class VoteLoadTester {
       const requestStartTime = Date.now();
 
       try {
-        const response = await fetch(`${baseUrl}/api/v1/votes/cast`, {
+        const response = await fetch(`${baseUrl}/api/v1/svp/votes`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
-            itemId,
-            userId,
-            decision: Math.random() > 0.5 ? 'upvote' : 'downvote',
-            weight: Math.floor(Math.random() * 10) + 1,
+            activityId: itemId,
+            activityScope: 'local',
+            requestId: `load-${workerId}-${Date.now()}-${i}`,
           }),
         });
 

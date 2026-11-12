@@ -203,7 +203,7 @@ export default function SPVSystem() {
       addSimulationEvent({
         description: `Voto registrado: ${activity.name}`,
         type: "vote",
-        details: `${selectedOrigin.label} → ${activity.name}; dashboard MVP aún otorga reward fijo, no la fórmula final.`,
+        details: `${selectedOrigin.label} → ${activity.name}; puntos calculados por las reglas activas.`,
         status: "success",
       });
     } catch (error) {
@@ -285,7 +285,7 @@ export default function SPVSystem() {
           <p className="text-sm text-slate-600">Los votos alimentan la fórmula de conversión a puntos; el monitoreo valida la actividad y el tiempo.</p>
           <div className="mt-2 text-slate-500">
             <InfoPopover label="Información sobre el cálculo de puntos">
-              Los votos locales y globales alimentan la fórmula; el monitoreo valida actividad y tiempo por persona y local. Un voto no es una compra. Aviso: el endpoint MVP del dashboard aún otorga un reward fijo y no aplica la fórmula final.
+              Los votos locales y globales usan las reglas activas de puntos; cuando una actividad está vinculada, el voto también actualiza su historial y progreso. El monitoreo valida actividad y tiempo por persona y local. Un voto no es una compra.
             </InfoPopover>
           </div>
         </div>

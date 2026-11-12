@@ -15,7 +15,7 @@ Dominio (origen) -> actividades vinculadas -> actividad registrada -> voto/monit
 
 La demo define los vínculos en `SIMULATION_DOMAIN_LINKS` (`src/SPVSystem.tsx`): Panadería → Panadero/Vendedor/Limpieza; Restaurante → Cocinero/Mesero/Limpieza; Peluquería → Peluquero/Recepcionista/Limpieza. La relación es de demostración y aún no está persistida en backend.
 
-El dashboard MVP llama `/api/spv/vote` y acredita un reward fijo; el endpoint formal `/api/votes` aplica `point_rules` y `points_ledger`. No son aún una implementación única de la fórmula. Los votos sirven como insumo de conversión; no hay requisito documentado de usar votos para comprar.
+El dashboard y las integraciones usan el endpoint canónico `POST /api/svp/votes`, que calcula puntos con `point_rules`, escribe `points_ledger` y conserva el historial y la propagación de progreso a tareas vinculadas. Los votos sirven como insumo de conversión; no hay requisito documentado de usar votos para comprar.
 
 ## Puntos canónicos
 
@@ -25,10 +25,10 @@ El dashboard MVP llama `/api/spv/vote` y acredita un reward fijo; el endpoint fo
 | Experiencia SVP | `src/SPVSystem.tsx` | Extender por componentes/hook, no duplicar la pantalla |
 | Estado SVP | `src/hooks/useSpv.ts` | No crear otro hook paralelo para votos |
 | Cliente HTTP base | `src/services/httpClient.ts` | Toda llamada nueva debe reutilizar `requestJSON` |
-| Cliente API MVP Neon | `src/services/neonClient.ts` | Fuente del flujo SPV real y de su trazabilidad |
+| Cliente API MVP Neon | `src/services/neonClient.ts` | Lecturas del modelo SPV; los votos pasan por el cliente autenticado `spvApi.ts` |
 | Adaptador de integración externa | `src/services/spvApi.ts` | Contrato público para plataformas suscritas: actividades, votos, puntos y transacciones; no eliminar ni congelar sin verificar consumidores externos |
 | Rutas del backend | `backend/src/routes/index.ts` | Registrar cada router una sola vez |
-| Controlador MVP | `backend/src/routes/spvMvp.routes.ts` | Validar contrato y orquestar transacción |
+| Controlador MVP | `backend/src/routes/spvMvp.routes.ts` | Rutas de lectura y operaciones MVP distintas de voto |
 | Modelo/persistencia | `backend/src/db`, `backend/sql` | Queries parametrizadas y migraciones versionadas |
 | Validación | `backend/src/validation/schemas.ts` | Contratos Zod antes del controlador |
 | Operaciones | `src/components/Sprint3/*` | Un panel por responsabilidad, usando rutas existentes |
@@ -39,18 +39,18 @@ El dashboard MVP llama `/api/spv/vote` y acredita un reward fijo; el endpoint fo
 
 ### Clientes API
 
-`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos y llamadas parcialmente solapados, pero no son equivalentes. Evidencia de consumidores: `src/hooks/useSpv.ts` importa y llama `getSpvBootstrapState`, `getUsers`, `castVote`, `transferPoints` y `createActivity`; el camino de voto real también llama `neonClient.castVote`.
+`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos parcialmente solapados, pero no son equivalentes. `src/hooks/useSpv.ts` usa `spvApi.castVote` para el único flujo de voto autenticado; `neonClient.ts` conserva las lecturas MVP y no publica votos.
 
 | Funciones de spvApi | Rutas actuales | Clasificación |
 | --- | --- | --- |
-| `getSpvBootstrapState` | `GET /api/points/balance/:userId`, `/api/votes/count`, `/api/votes/limits` | Implementadas; requieren auth |
-| `castVote` | `POST /api/votes` | Implementada; requiere auth |
+| `getSpvBootstrapState` | `GET /api/points/balance/:userId`, `/api/svp/votes/count`, `/api/svp/votes/limits` | Implementadas; requieren auth |
+| `castVote` | `POST /api/svp/votes` | Implementada; requiere auth |
 | `transferPoints` | `POST /api/points/transfer` | Implementada; requiere auth |
 | `getUsers`, `getActivities` | Helper llama `/api/users` y `/api/activities`; backend MVP expone `GET /api/spv/users` y `GET /api/spv/activities` | Hay rutas con otro prefijo; el helper no las consume y oculta errores con mocks/arrays vacíos |
 | `getTransactions`, `getTableData` | Llama `/api/transactions` y `/api/data/:tableName` | No se encontraron esas rutas; devuelve arrays vacíos al fallar |
 | `createActivity`, `updateActivity`, `updateTransaction`, deletes y cancel transfer | Llama rutas helper no coincidentes | No hay equivalencia verificada; CRUD crea respuestas locales o ignora errores |
 
-`neonClient.ts` alimenta el dashboard con `/api/spv/*`. No eliminar ni considerar operativo un endpoint de `spvApi` solo porque tenga un helper cliente; confirmar ruta y contrato en backend.
+`neonClient.ts` alimenta lecturas del dashboard con `/api/spv/*`; el voto canónico está en `spvApi.ts` y requiere Bearer token. No considerar operativo otro endpoint solo porque tenga un helper cliente; confirmar ruta y contrato en backend.
 
 ### Migraciones
 

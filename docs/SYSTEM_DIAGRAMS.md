@@ -80,7 +80,7 @@ sequenceDiagram
 
   E->>V: actividad + externalReference
   V->>H: seleccionar actividad
-  H->>A: POST /api/spv/vote
+  H->>A: POST /api/svp/votes
   A->>C: contrato validado con requestId
   C->>C: validar usuario, actividad, puntos e idempotencia
   C->>M: transacción voto + ledger + historial

@@ -6,9 +6,20 @@ export interface SpvBootstrapState {
   remainingVotes: number;
 }
 
+export interface VoteImpact {
+  taskId: string;
+  taskTitle: string;
+  taskProgress: number;
+  taskStatus: string;
+  strategicId: string | null;
+  strategicTitle: string | null;
+  strategicProgress: number | null;
+}
+
 export interface VoteResult {
   pointsGranted: number;
   remainingVotes: number;
+  impact: VoteImpact | null;
 }
 
 export interface ApiHealth {
@@ -83,10 +94,9 @@ type VoteLimitsResponse = {
 };
 
 // EXTERNAL INTEGRATION ADAPTER
-// This module exposes the public activity/vote/points contract used by external
-// platforms. The current dashboard uses neonClient.ts for its Neon-backed read model;
-// do not remove or freeze this adapter while external consumers depend on /api/votes,
-// /api/points, /api/activities, or /api/transactions.
+// This module exposes the protected activity/vote/points contract used by the dashboard
+// and external platforms. Votes use /api/svp/votes; other resource endpoints remain
+// independently versioned and should only be changed with their consumers.
 
 // =====================
 // READ Operations
@@ -95,8 +105,8 @@ type VoteLimitsResponse = {
 export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrapState> {
   const [balance, voteCount, voteLimits] = await Promise.all([
     requestJSON<BalanceResponse>(`/api/points/balance/${userId}`),
-    requestJSON<VoteCountResponse>("/api/votes/count"),
-    requestJSON<VoteLimitsResponse>("/api/votes/limits"),
+    requestJSON<VoteCountResponse>("/api/svp/votes/count"),
+    requestJSON<VoteLimitsResponse>("/api/svp/votes/limits"),
   ]);
 
   const available = asNumber(balance.available ?? balance.points_available, 0);
@@ -165,17 +175,35 @@ export async function getTableData(tableName: string): Promise<Record<string, un
 // CREATE Operations
 // =====================
 
-type VotePayload = { pointsGranted?: number; limits?: { remainingVotes?: number } };
+type VotePayload = {
+  pointsGranted?: number;
+  limits?: { remainingVotes?: number };
+  impact?: VoteImpact | null;
+};
 
-export async function castVote(activityId: string, requestId: string): Promise<VoteResult> {
-  const payload = await requestJSON<VotePayload>("/api/votes", {
+export async function castVote(
+  activityId: string,
+  requestId: string,
+  activityScope: "local" | "global" = "local",
+  externalContext?: { domain: string; reference: string },
+): Promise<VoteResult> {
+  const payload = await requestJSON<VotePayload>("/api/svp/votes", {
     method: "POST",
-    body: JSON.stringify({ activityId, requestId, request_id: requestId }),
+    body: JSON.stringify({
+      activityId,
+      activityScope,
+      requestId,
+      request_id: requestId,
+      metadata: externalContext
+        ? { externalDomain: externalContext.domain, externalReference: externalContext.reference }
+        : {},
+    }),
   });
 
   return {
     pointsGranted: Math.max(0, asNumber(payload.pointsGranted, 0)),
-    remainingVotes: Math.max(0, asNumber(payload.limits?.remainingVotes, 0)),
+    remainingVotes: Math.max(0, asNumber(payload.limits?.remainingVotes, MAX_DAILY_VOTES)),
+    impact: payload.impact ?? null,
   };
 }
 
