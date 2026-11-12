@@ -1,5 +1,5 @@
 import { 
-  Activity, Coins, History, Vote, Settings, Play, Pause, RotateCcw, Send, Download,
+  Activity, Coins, History, Package, Vote, Settings, Play, Pause, RotateCcw, Send, Download,
   Users, TrendingUp, Clock, CheckCircle2, XCircle, AlertTriangle, Plus, Pencil, Trash2,
   Search, Table, Copy, Check, Info, X
 } from "lucide-react";
@@ -10,8 +10,9 @@ import { AlertsPanel } from "./components/Sprint3/AlertsPanel";
 import { LoadTestPanel } from "./components/Sprint3/LoadTestPanel";
 import { ReconciliationPanel } from "./components/Sprint3/ReconciliationPanel";
 import { ImpactNotifications } from "./components/ImpactNotifications";
+import { InventoryPanel } from "./components/InventoryPanel";
 
-type TabId = "activities" | "points" | "history" | "operations";
+type TabId = "activities" | "inventory" | "points" | "history" | "operations";
 
 interface SimulationEvent {
   id: string;
@@ -267,6 +268,7 @@ export default function SPVSystem() {
 
   const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode; description: string }> = [
     { id: "activities", label: "Actividades", icon: <Vote size={16} />, description: "Votar y gestionar actividades" },
+    { id: "inventory", label: "Inventario", icon: <Package size={16} />, description: "Consultar y comprar objetos con puntos SVP" },
     { id: "points", label: "Puntos", icon: <Coins size={16} />, description: "Transferir y recibir puntos" },
     { id: "history", label: "Historial", icon: <History size={16} />, description: "Ver transacciones y eventos" },
     { id: "operations", label: "Operaciones", icon: <Settings size={16} />, description: "Herramientas y monitoreo" },
@@ -667,6 +669,8 @@ export default function SPVSystem() {
           </div>
         </div>
       )}
+
+      {activeTab === "inventory" && <InventoryPanel />}
 
       {/* Contenido de pestana: Puntos */}
       {activeTab === "points" && (

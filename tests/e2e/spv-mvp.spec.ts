@@ -23,6 +23,9 @@ test.describe('SVP MVP', () => {
   });
 
   test('switches across the primary tabs', async ({ page }) => {
+    await page.getByRole('button', { name: /Inventario/ }).click();
+    await expect(page.getByRole('heading', { name: 'Inventario de objetos' })).toBeVisible();
+
     await page.getByRole('button', { name: /Puntos/ }).click();
     await expect(page.getByText('Transferir Puntos')).toBeVisible();
 
