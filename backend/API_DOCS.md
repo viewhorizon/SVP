@@ -17,6 +17,8 @@ Endpoints, reglas y convenciones para el backend SPV.
 - Observabilidad: todas las respuestas incluyen header `x-request-id`
 - Auth modo `dev`: `Bearer dev:<uid>` cuando `AUTH_MODE=dev` o `AUTH_MODE=auto`
 - Auth modo Firebase real: `AUTH_MODE=firebase` + credenciales de servicio
+- `POST /api/points/credit` requiere claim Firebase `admin: true`; no habilitar emisiones hasta asignar el claim solo a emisores autorizados.
+- `POST /api/points/debit` y `GET /api/points/balance/:userId` solo aceptan otra cuenta si el actor tiene el mismo claim admin; el balance de sesión usa `GET /api/points/balance`.
 - Errores: `{ "error": "mensaje" }`
 
 ## Migración del contrato de votos

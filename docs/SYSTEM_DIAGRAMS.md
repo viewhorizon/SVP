@@ -7,7 +7,7 @@
 ```mermaid
 flowchart TB
   UI["src/components y vistas"] --> Hook["src/hooks/useSpv.ts"]
-  Hook --> Client["src/services/spvApi.ts\nAdaptador externo"]
+  Hook --> Client["src/services/spvApi.ts\nAdaptador de API del dashboard"]
   Hook --> NeonClient["src/services/neonClient.ts\nCliente vista SVP"]
   Client --> HTTP["src/services/httpClient.ts"]
   NeonClient --> HTTP
@@ -117,8 +117,8 @@ flowchart TD
 
 ## Reglas de lectura
 
-- `spvApi.ts` es el adaptador de integración para plataformas externas; no es un script descartable.
-- `neonClient.ts` sirve al flujo de vista SVP y no reemplaza automáticamente el contrato externo.
+- `spvApi.ts` sigue activo para bootstrap de sesión y voto; no se encontraron consumidores externos en el repo, así que no se afirma compatibilidad fuera de él.
+- `neonClient.ts` sirve al flujo MVP interno; helpers antiguos de `spvApi.ts` no sustituyen sus rutas ni contratos. Transferencias y créditos permanecen deshabilitados en la UI.
 - Inventory, CRM, E-commerce y Custom son contextos de origen; no son mercados ni dinero por sí mismos.
 - Los puntos son valor SVP acumulado. Su cotización, comercialización o uso sobre objetos de inventario requiere reglas e integración externa explícitas.
 - Una respuesta válida debe conservar trazabilidad: `externalDomain`, `externalReference`, `operationId`, `valueUnit`, voto, ledger e impacto.

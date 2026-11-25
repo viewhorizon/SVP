@@ -25,8 +25,8 @@ Actualmente esas tres relaciones viven en `SIMULATION_DOMAIN_LINKS` de `src/SPVS
 
 ## Fallbacks comprobados en código
 
-- `src/services/spvApi.ts`: `getUsers` retorna cinco usuarios mock si falla; `getActivities`, `getTransactions` y `getTableData` retornan `[]`; `createActivity` y `updateActivity` fabrican respuestas locales; deletes y `cancelTransfer` ignoran errores.
-- `src/hooks/useSpv.ts`: si fallan las llamadas reales, el voto y la transferencia pueden actualizar el estado local y mostrar éxito.
-- Hay diferencias entre rutas cliente `/api/users` y `/api/activities` y rutas MVP del backend `/api/spv/users` y `/api/spv/activities`; no son el mismo contrato.
+- `src/services/spvApi.ts` conserva fallbacks en funciones históricas; el hook activo ya no las usa para cargar usuarios/actividades ni para CRUD interno.
+- `src/hooks/useSpv.ts` no crea usuarios/actividades ficticios ante fallos; el voto, saldo y CRUD solo cambian tras confirmación del backend.
+- Las rutas helper antiguas `/api/users` y `/api/activities` siguen sin coincidir con el backend MVP `/api/spv/users` y `/api/spv/activities`. La UI de transferencia/crédito queda deshabilitada hasta resolver el vínculo de identidades y la autorización.
 
 Este documento describe comportamiento comprobado y separa los flujos funcionales previstos de lo que aún falta implementar.

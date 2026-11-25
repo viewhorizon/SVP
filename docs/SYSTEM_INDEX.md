@@ -26,7 +26,7 @@ El dashboard y las integraciones usan el endpoint canónico `POST /api/svp/votes
 | Estado SVP | `src/hooks/useSpv.ts` | No crear otro hook paralelo para votos |
 | Cliente HTTP base | `src/services/httpClient.ts` | Toda llamada nueva debe reutilizar `requestJSON` |
 | Cliente API MVP Neon | `src/services/neonClient.ts` | Lecturas del modelo SPV; los votos pasan por el cliente autenticado `spvApi.ts` |
-| Adaptador de integración externa | `src/services/spvApi.ts` | Contrato público para plataformas suscritas: actividades, votos, puntos y transacciones; no eliminar ni congelar sin verificar consumidores externos |
+| Adaptador de API del dashboard | `src/services/spvApi.ts` | Bootstrap de sesión y voto canónico activos; helpers de escritura de puntos se conservan pero no se exponen en la UI hasta resolver identidad/autorización. No hay evidencia de consumidores externos en este repositorio |
 | Rutas del backend | `backend/src/routes/index.ts` | Registrar cada router una sola vez |
 | Controlador MVP | `backend/src/routes/spvMvp.routes.ts` | Rutas de lectura y operaciones MVP distintas de voto |
 | Modelo/persistencia | `backend/src/db`, `backend/sql` | Queries parametrizadas y migraciones versionadas |
@@ -37,24 +37,33 @@ El dashboard y las integraciones usan el endpoint canónico `POST /api/svp/votes
 
 ## Duplicaciones detectadas y tratamiento
 
-### Clientes API
+### Clientes API y contrato por función
 
-`src/services/spvApi.ts` y `src/services/neonClient.ts` contienen contratos parcialmente solapados, pero no son equivalentes. `src/hooks/useSpv.ts` usa `spvApi.castVote` para el único flujo de voto autenticado; `neonClient.ts` conserva las lecturas MVP y no publica votos.
+`src/services/spvApi.ts` y `src/services/neonClient.ts` no son equivalentes. La interfaz interna lee el modelo MVP desde `/api/spv/*`; voto y puntos pasan por rutas autenticadas. La búsqueda de referencias encontró `useSpv.ts` como único importador en el frontend. No hay evidencia de consumidores externos en el repositorio, pero eso no prueba que no existan fuera de él.
 
-| Funciones de spvApi | Rutas actuales | Clasificación |
-| --- | --- | --- |
-| `getSpvBootstrapState` | `GET /api/points/balance/:userId`, `/api/svp/votes/count`, `/api/svp/votes/limits` | Implementadas; requieren auth |
-| `castVote` | `POST /api/svp/votes` | Implementada; requiere auth |
-| `transferPoints` | `POST /api/points/transfer` | Implementada; requiere auth |
-| `getUsers`, `getActivities` | Helper llama `/api/users` y `/api/activities`; backend MVP expone `GET /api/spv/users` y `GET /api/spv/activities` | Hay rutas con otro prefijo; el helper no las consume y oculta errores con mocks/arrays vacíos |
-| `getTransactions`, `getTableData` | Llama `/api/transactions` y `/api/data/:tableName` | No se encontraron esas rutas; devuelve arrays vacíos al fallar |
-| `createActivity`, `updateActivity`, `updateTransaction`, deletes y cancel transfer | Llama rutas helper no coincidentes | No hay equivalencia verificada; CRUD crea respuestas locales o ignora errores |
+| Función exportada | Consumidor del repo | Ruta, esquema y persistencia | Clasificación/evidencia |
+| --- | --- | --- | --- |
+| `getSpvBootstrapState` | `useSpv.ts` | `GET /api/points/balance`, `/api/svp/votes/count`, `/api/svp/votes/limits`; autenticadas. Balance lee `points_wallet`/`points_ledger`; conteo consulta `votes` y `point_limits` | Activa; el bootstrap ahora usa el balance de la sesión. El argumento opcional se conserva por compatibilidad, pero no determina el usuario |
+| `castVote` | `useSpv.ts` | `POST /api/svp/votes`; `votesCreateSchema`; escribe `votes`, `points_ledger`/`points_wallet`, usa `point_rules` y `point_limits`, y puede actualizar tareas/objetivos vinculados | Activa y transaccional; el frontend solo actualiza el saldo tras confirmación del backend |
+| `transferPoints` | Ninguno en la UI actual | `POST /api/points/transfer`; `pointsTransferSchema`; ledger debit/credit en `points_ledger` y balance en `points_wallet` | Helper de compatibilidad; botón deshabilitado porque no se verificó vínculo entre `spv_users` y UUIDs de wallet |
+| `creditPoints` | Ninguno en la UI actual | `POST /api/points/credit`; `pointsCreditSchema`; `points_ledger` y `points_wallet` | Helper sin consumidor; la ruta exige claim Firebase `admin: true`; no reexponer hasta que el proyecto configure emisores admin autorizados |
+| `checkApiHealth` | Ninguno encontrado | `GET /health` existe | No usada; el dashboard consulta health mediante `neonClient.checkNeonHealth` |
+| `getUsers` | Ninguno tras retirar el fallback del hook | Helper llama `GET /api/users`; ruta MVP real: `/api/spv/users`, responde `{ok,data}` desde `spv_users` | Histórica/no alineada; helper conserva fallback mock |
+| `getActivities` | Ninguno | Helper llama `GET /api/activities`; ruta real: `/api/spv/activities`, responde `{ok,data}` desde `spv_activities` | Histórica/no alineada; helper convierte fallos en lista vacía |
+| `getTransactions` | Ninguno | Helper llama `/api/transactions`; hay `/api/monitor/transactions`, con contrato de monitor distinto | No equivalente verificada; fallback a lista vacía |
+| `getTableData` | Ninguno | Helper llama `/api/data/:tableName`; no hay ruta correspondiente | No implementada; fallback a lista vacía |
+| `createActivity` | Ninguno tras mover CRUD interno a `neonClient` | Helper llama `POST /api/activities`; ruta actual `POST /api/spv/activities` usa `spv_activities` y devuelve `{ok,data}` | Histórica/no alineada; la ruta interna carece de auth/Zod |
+| `updateActivity` | Ninguno | Helper usa `PATCH /api/activities/:id`; ruta real es `PUT /api/spv/activities/:id` | Histórica/no alineada; la interfaz interna actual solo refleja cambios tras respuesta exitosa de `neonClient` |
+| `deleteActivity` | Ninguno | Helper usa `DELETE /api/activities/:id`; ruta real `DELETE /api/spv/activities/:id` marca `is_active=false` | Histórica/no alineada; la interfaz interna ya no oculta fallos con una eliminación local |
+| `updateTransaction` | Ninguno | `PATCH /api/transactions/:id`; no se encontró ruta | No implementada; helper devuelve objeto local ante error |
+| `deleteTransaction` | Ninguno | `DELETE /api/transactions/:id`; no se encontró ruta | No implementada; helper silencia fallos |
+| `cancelTransfer` | Ninguno | `POST /api/points/transfer/:id/cancel`; no se encontró ruta | No implementada; helper silencia fallos |
 
-`neonClient.ts` alimenta lecturas del dashboard con `/api/spv/*`; el voto canónico está en `spvApi.ts` y requiere Bearer token. No considerar operativo otro endpoint solo porque tenga un helper cliente; confirmar ruta y contrato en backend.
+`neonClient.ts` realiza las lecturas y el CRUD MVP por `/api/spv/*`; el selector de actividad y el dashboard usan filas persistidas y no insertan tarjetas ficticias cuando la API falla. Las acciones de transferencia/crédito están deshabilitadas mientras falte vínculo de identidad y autorización adecuada. El endpoint de crédito exige el custom claim Firebase `admin: true`; los débitos y consultas de balance por `userId` solo aceptan la propia cuenta salvo actor admin. Los endpoints MVP de `spvMvp.routes.ts` todavía carecen de autenticación y esquemas Zod: no tratarlos como listos para producción. El endpoint `GET /api/points/balance/:userId` sigue disponible por compatibilidad; el hook ya no lo usa para el saldo de sesión.
 
 ### Migraciones
 
-Existen `scripts/run_migrations.js`, `scripts/execute_migrations.js`, `scripts/migrations_consolidated.js`, `scripts/execute_sprint3_migrations.js` y el SQL consolidado. No deben ejecutarse indistintamente: `run_migrations.js` es el runner de referencia y `backend/sql/*.sql` es la fuente versionada. Los demás scripts requieren migración explícita antes de ser usados en producción.
+`backend/sql/*.sql` es la fuente versionada prevista, pero `scripts/run_migrations.js` no es todavía fiable para despliegue: divide por `;`, continúa tras errores, omite `20260326_operational_alerts.sql` y `20260330_spv_mvp_tables.sql`, y no registra versiones aplicadas. `scripts/execute_sql.py`, `scripts/execute_migrations.js`, `scripts/execute_sprint3_migrations.js`, `scripts/migrations_consolidated.js` y `scripts/01_run_all_migrations.sql` son rutas alternas/históricas con distintos riesgos y esquemas. Ninguno debe ejecutarse hasta corregir y validar un único runner; el detalle por archivo está en `docs/LEGACY_DECISIONS.md`.
 
 ### Tests y reportes
 
@@ -70,4 +79,4 @@ Existen `scripts/run_migrations.js`, `scripts/execute_migrations.js`, `scripts/m
 6. Toda nueva migración debe ser incremental, versionada y ejecutable una sola vez.
 7. Si una pieza legacy debe permanecer, documentar su motivo y prohibir nuevas dependencias.
 
-Última revisión: 2026-11-11.
+Última revisión: 2026-11-25.

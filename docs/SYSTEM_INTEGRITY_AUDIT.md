@@ -87,3 +87,12 @@ Conclusión: no hay base suficiente para afirmar “cero huérfanos”. Sí hay 
 ## Criterio de cierre
 
 No declarar integridad total hasta que los siete puntos anteriores tengan evidencia. La cobertura existente es un indicador, no el criterio único de calidad.
+
+## Seguimiento 2026-11-25
+
+- Se completó el mapa función→consumidor→ruta→schema→tablas de `spvApi.ts` y el registro individual de los ejecutores/migraciones SQL en `docs/SYSTEM_INDEX.md` y `docs/LEGACY_DECISIONS.md`.
+- La UI ya no inventa usuarios/actividades/saldos iniciales; CRUD interno solo refleja éxito persistido. Transferencias/créditos manuales quedan deshabilitados hasta resolver mapeo de identidad y autorización.
+- `/api/points/credit` ahora requiere claim Firebase `admin: true`; débitos y lecturas de balance por ID no permiten operar sobre otra cuenta sin admin.
+- Verificación ejecutada: `npm run check`, `npm run build` y `npm run test:api` (21/21) pasaron.
+- Playwright quedó bloqueado porque falta el ejecutable Chromium esperado; `agent-browser` no pudo conectar porque el preview no estaba listo. La prueba funcional de UI de esta iteración queda pendiente.
+- El runner de migraciones no se ejecutó ni se considera seguro: falta reparar tracking, parser/ejecución transaccional y conjunto de archivos antes de validar en una base desechable.

@@ -110,7 +110,6 @@ export default function SPVSystem() {
   const [simulationEvents, setSimulationEvents] = useState<SimulationEvent[]>([]);
   const [selectedOriginId, setSelectedOriginId] = useState<string>("inventory");
   const [selectedSimulationActivity, setSelectedSimulationActivity] = useState<string>("");
-  const [userFilter, setUserFilter] = useState("");
   const [historyFilter, setHistoryFilter] = useState("");
   const [showDataTable, setShowDataTable] = useState(false);
   const [editingActivity, setEditingActivity] = useState<string | null>(null);
@@ -123,7 +122,6 @@ export default function SPVSystem() {
   const { actions, constants, state } = useSpv();
   const {
     activities,
-    amount,
     groupedActivities,
     healthLabel,
     healthState,
@@ -132,7 +130,6 @@ export default function SPVSystem() {
     lastRequestId,
     message,
     pointsAvailable,
-    receiver,
     todayVotesUsed,
     totalPointsAccumulated,
     registeredUsers,
@@ -145,15 +142,6 @@ export default function SPVSystem() {
     const linkedNames = new Set(selectedOrigin.activities.map(normalizeActivityName));
     return activities.filter((activity) => linkedNames.has(normalizeActivityName(activity.name)));
   }, [activities, selectedOrigin]);
-
-  // Filtrar usuarios por búsqueda
-  const filteredUsers = useMemo(() => {
-    if (!userFilter.trim()) return registeredUsers;
-    const search = userFilter.toLowerCase();
-    return registeredUsers.filter(
-      (u) => u.username.toLowerCase().includes(search) || u.displayName.toLowerCase().includes(search)
-    );
-  }, [registeredUsers, userFilter]);
 
   // Filtrar historial por búsqueda
   const filteredHistory = useMemo(() => {
@@ -194,28 +182,6 @@ export default function SPVSystem() {
           ? `+${Math.round(activity.pointsPerHour * 2)} pts otorgados`
           : "El backend SVP no confirmó el voto; no se actualizaron los puntos.",
       });
-    }
-  };
-
-  const handleTransferWithSimulation = async () => {
-    if (simulationMode) {
-      addSimulationEvent({
-        type: "transfer",
-        description: `Transferencia de ${amount} pts a @${receiver}`,
-        status: "pending",
-        details: "Procesando en ledger...",
-      });
-    }
-    await actions.handleTransfer();
-    if (simulationMode) {
-      setTimeout(() => {
-        addSimulationEvent({
-          type: "transfer",
-          description: `Transferencia completada: ${amount} pts`,
-          status: "success",
-          details: `Destinatario: @${receiver}`,
-        });
-      }, 800);
     }
   };
 
@@ -688,85 +654,31 @@ export default function SPVSystem() {
       {activeTab === "points" && (
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-slate-200 bg-white p-6">
-            <h3 className="text-lg font-bold text-slate-900">Transferir Puntos</h3>
-            <p className="mt-1 text-sm text-slate-500">Envia puntos a usuarios registrados</p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Destinatario</label>
-                <div className="relative mt-1">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={userFilter}
-                    onChange={(event) => {
-                      setUserFilter(event.target.value);
-                      if (!event.target.value) actions.setReceiver("");
-                    }}
-                    placeholder="Buscar usuario..."
-                    className="w-full rounded-lg border border-slate-300 pl-9 pr-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                
-                {/* Lista de usuarios filtrados */}
-                {userFilter && filteredUsers.length > 0 && (
-                  <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    {filteredUsers.map((user) => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        onClick={() => {
-                          actions.setReceiver(user.username);
-                          setUserFilter("");
-                        }}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
-                      >
-                        <div>
-                          <span className="font-medium text-slate-900">@{user.username}</span>
-                          <span className="ml-2 text-slate-500">{user.displayName}</span>
-                        </div>
-                        <span className="text-xs text-slate-400">{user.pointsBalance} pts</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {receiver && !userFilter && (
-                  <p className="mt-1 text-xs text-emerald-600">Destinatario seleccionado: @{receiver}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Cantidad</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={pointsAvailable}
-                  value={amount}
-                  onChange={(event) => actions.setAmount(Number(event.target.value))}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => void handleTransferWithSimulation()}
-                  disabled={!receiver || amount <= 0 || amount > pointsAvailable}
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  <Send size={16} className="mr-2 inline" /> Transferir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void actions.handleReceive();
-                    if (simulationMode) {
-                      addSimulationEvent({ type: "credit", description: "Puntos recibidos", status: "success", details: "+8 pts" });
-                    }
-                  }}
-                  className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <Download size={16} className="mr-2 inline" /> Recibir
-                </button>
-              </div>
+            <h3 className="text-lg font-bold text-slate-900">Transferencias</h3>
+            <p className="mt-1 text-sm text-slate-500">Las operaciones de saldo solo se muestran cuando están confirmadas por el backend.</p>
+            <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">No disponible en esta versión</p>
+              <p className="mt-1">El directorio de usuarios y las cuentas del ledger todavía no tienen un vínculo de identidad verificado. No se realizan transferencias ni créditos desde esta pantalla.</p>
             </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled
+                aria-describedby="points-transfer-unavailable"
+                className="rounded-lg bg-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600"
+              >
+                <Send size={16} className="mr-2 inline" /> Transferencia no disponible
+              </button>
+              <button
+                type="button"
+                disabled
+                aria-describedby="points-transfer-unavailable"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-500"
+              >
+                <Download size={16} className="mr-2 inline" /> Crédito no disponible
+              </button>
+            </div>
+            <p id="points-transfer-unavailable" className="sr-only">Se requiere un vínculo de identidad y autorización de crédito antes de modificar saldos.</p>
           </section>
 
           <section className="space-y-4">
@@ -791,14 +703,14 @@ export default function SPVSystem() {
             {/* Usuarios registrados */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-900">Usuarios Registrados</p>
+                <p className="text-sm font-semibold text-slate-900">Directorio del modelo MVP</p>
                 <span className="text-xs text-slate-500">{registeredUsers.length} usuarios</span>
               </div>
               <div className="mt-3 max-h-32 space-y-1 overflow-y-auto">
                 {registeredUsers.slice(0, 5).map((user) => (
                   <div key={user.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
                     <span className="font-medium text-slate-700">@{user.username}</span>
-                    <span className="text-slate-500">{user.pointsBalance} pts</span>
+                    <span className="text-slate-500">{user.pointsBalance} pts MVP</span>
                   </div>
                 ))}
               </div>

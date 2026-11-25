@@ -49,4 +49,41 @@ Este registro evita eliminar o congelar código fundamental por una inferencia. 
 - **Mapa de `spvApi.ts`:** `src/hooks/useSpv.ts` llama bootstrap, usuarios, voto, transferencia y creación de actividad. Balance/conteo/límites, `POST /api/svp/votes` y `POST /api/points/transfer` tienen rutas protegidas. Los helpers llaman `/api/users` y `/api/activities`, pero las rutas MVP disponibles son `/api/spv/users` y `/api/spv/activities`; path y contrato no coinciden. No se hallaron `/api/transactions` ni `/api/data/*` ni rutas de CRUD/cancelación equivalentes. Evidencia de fallbacks: `spvApi.ts:124-162, 200-269` y `useSpv.ts:317-357, 367-376`.
 - **Pruebas:** `backend/tests/api.integration.test.ts` cubre `/api/svp/votes` y `/api/points`; no hay evidencia de prueba de contrato para inventario ni el adaptador parcial.
 
-Última revisión: 2026-11-11.
+## 2026-11-25 — Revisión de `spvApi.ts`, flujos de saldo y migraciones
+
+- **Corrección de alcance:** la búsqueda del repositorio encontró `src/hooks/useSpv.ts` como único importador de `spvApi.ts`; no hay evidencia local de plataformas externas suscritas. La compatibilidad fuera del repositorio sigue sin confirmarse, así que el módulo no se eliminó. El mapa función→consumidor→ruta→schema→tablas está en `docs/SYSTEM_INDEX.md`.
+- **Cambios de frontend:** el bootstrap usa el balance de la sesión; actividades, usuarios e historial vienen de Neon y no se reemplazan por datos ficticios ni se restauran del almacenamiento local. Los fetchers señalan fallos al hook; el CRUD interno usa `neonClient` y solo refleja respuesta exitosa. Los controles de transferencia/crédito manual se deshabilitaron.
+- **Deuda de contrato:** la lista MVP usa `spv_users`, pero `/api/points/transfer` necesita un ID de wallet. No se encontró vínculo entre ambos modelos; por eso la transferencia permanece deshabilitada.
+- **Corrección de autorización:** `/api/points/credit` ahora exige un custom claim verificado de Firebase `admin: true`; débitos y consultas de balance a otra cuenta también requieren admin. Se añadieron pruebas para rechazar créditos sin claim, débitos cruzados y lecturas cruzadas. El claim debe asignarse solo a emisores autorizados; la UI mantiene crédito manual deshabilitado y los webhooks firmados siguen siendo una ruta distinta.
+
+### Auditoría individual de ejecutores
+
+| Archivo | Propósito y tablas/objetos | Dependencias/riesgos | Decisión |
+| --- | --- | --- | --- |
+| `scripts/run_migrations.js` | Ejecuta la lista de ocho SQL versionados (`20260318`–`20260325`): `points_wallet`, `points_ledger`, `point_rules`, `point_limits`, `votes`, identity/ingest, inventario, logros, `outbox_events`, `inventory_ledger_events`, `policy_rules` | Omite `20260326_operational_alerts.sql` y `20260330_spv_mvp_tables.sql`; identidad aparece antes que inventario; rutas absolutas; `split(';')` rompe bloques `DO $$`; captura errores y aun así informa éxito; sin tabla de versiones | Camino previsto, no seguro para despliegue hasta reparar y probar |
+| `scripts/execute_sql.py` | Alternativa Python que ejecuta la misma lista/tablas versionadas | Rutas absolutas y parser `split(';')`; ignora errores dentro de una transacción `psycopg` y luego intenta `commit`; sin registro de migraciones | Histórico; no ejecutar |
+| `scripts/execute_migrations.js` | Ejecuta `scripts/01_run_all_migrations.sql`; no declara DDL propio | Modelo legado detallado en la fila SQL inferior; ruta absoluta; división por `;`; continúa ante fallos, cuenta errores como ejecutados y termina con éxito | Histórico; no ejecutar |
+| `scripts/execute_sprint3_migrations.js` | DDL inline para `operational_alerts`, sus índices y vista `operational_alerts_active` | Duplica `backend/sql/20260326_operational_alerts.sql`; no valida `DATABASE_URL` explícitamente; continúa tras errores y declara éxito | Histórico; no ejecutar |
+| `scripts/migrations_consolidated.js` | Copia parcial con `points_*`, `votes`, `identity_links`, `source_app_rates`, `external_activity_events`, `liveops_rates`, `inventory_catalog`, `user_inventory`, `cross_system_transactions`, achievements, `outbox_events`, `inventory_ledger_events` y `policy_rules`; incluye seeds | No incluye alertas ni tablas MVP; duplica SQL versionado; `split(';')`; suprime fallos como statements omitidos; sin registro de versiones | Histórico; no ejecutar |
+| `scripts/01_run_all_migrations.sql` | Esquema consolidado anterior: `users`, `votes`, `user_points`, `ledger`, `liveops_inventory`, achievements, `inventory_ledger`, `ledger_hash_chain`, `policy_rules`, `outbox*`, `operational_alerts`, `rate_limit_keys`, `identities`, `event_ingestion_log` | Tablas/columnas incompatibles con el modelo versionado (`points_wallet`, `points_ledger`, `user_inventory`, `outbox_events`, `spv_*`); `IF NOT EXISTS` no transforma una tabla existente | Archivo de referencia legado; no ejecutar junto al esquema actual |
+
+### Mapa de migraciones SQL versionadas
+
+| Archivo | Tablas/objetos principales | Dependencias y relación |
+| --- | --- | --- |
+| `20260318_spv_points_core.sql` | Enums `points_direction`, `points_operation_type`, `point_limit_type`, `point_limit_scope`; `points_wallet`, `points_ledger`, `point_rules`, `point_limits`; trigger function `set_updated_at()` | Base de puntos; incluye reglas, límites y saldos seed. Debe preceder a migraciones que usan `set_updated_at()` |
+| `20260318_votes_table.sql` | `votes` e índices | Contrato de voto canónico; se aplica después del core en la lista del runner |
+| `20260320_inventory_liveops_inventory.sql` | `liveops_rates`, `inventory_catalog`, `user_inventory`, `cross_system_transactions`; índices/triggers y semillas | Usa `set_updated_at()` del core; `inventory_catalog` es FK requerida por logros |
+| `20260321_identity_and_ingest.sql` | `identity_links`, `source_app_rates`, `external_activity_events`; índices/triggers y tarifas seed | Usa `set_updated_at()` del core; el runner la ordena antes de la versión `20260320` aunque es independiente de ese catálogo |
+| `20260322_achievements_voting.sql` | `achievement_definitions`, `achievement_votes` | FK `reward_item_id → inventory_catalog`; depende del inventario `20260320` y de `set_updated_at()` |
+| `20260323_outbox_dispatcher.sql` | `outbox_events`, índices y trigger | Usa `set_updated_at()` |
+| `20260324_inventory_ledger_hash_chain.sql` | `inventory_ledger_events`, índices y trigger | Usa `set_updated_at()` |
+| `20260325_policy_rules.sql` | `policy_rules`, índices y trigger | Usa `set_updated_at()`; el schema canónico difiere del SQL consolidado antiguo |
+| `20260326_operational_alerts.sql` | `operational_alerts`, `operational_alerts_active`, índices y comentarios | Migración canónica ausente del array de ambos runners que ejecutan el conjunto versionado; el runner Sprint 3 la copia inline |
+| `20260330_spv_mvp_tables.sql` | `spv_users`, `spv_activities`, `spv_transactions`, `spv_history`, `spv_simulation_events`; índices y seeds | Requerida por las lecturas/CRUD de `/api/spv/*`; ausente del array de runners versionados |
+
+`backend/sql/seed_demo_data.sql` inserta fixtures sobre el modelo canónico y `test_*.sql` son pruebas manuales/SQL, no migraciones del runner. No se encontraron referencias a estos ejecutores en `package.json` ni en `.github/workflows`; eso no descarta ejecución manual o fuera del repositorio.
+
+**Decisión:** no se ejecutó ningún runner, no se cambió SQL y no se eliminó ningún archivo. Se mantiene el camino versionado como intención, no como garantía operativa; requiere registro de migraciones, ejecución transaccional apropiada, orden/dependencias correctas, inclusión explícita de versiones faltantes y fallo no-cero ante error.
+
+Última revisión: 2026-11-25.

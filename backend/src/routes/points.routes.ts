@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { appendLedgerEntry, getBalance } from '../db/pointsRepository';
 import { withTransaction } from '../db/withTransaction';
-import { requireAuth, type AuthenticatedRequest } from '../middleware/requireAuth';
+import { requireAdmin, requireAuth, type AuthenticatedRequest } from '../middleware/requireAuth';
 import { checkAndStoreWebhookReplayKey } from '../services/webhookReplayGuard';
 import { getNumberConfig, getSecret } from '../services/secrets';
 import { validateBody, validateParams } from '../middleware/validate';
@@ -116,9 +116,12 @@ export function createPointsRouter({ pool }: CreatePointsRouterOptions) {
     }
   });
 
-  router.get('/points/balance/:userId', requireAuth, validateParams(userIdParamsSchema), async (_req: AuthenticatedRequest, res) => {
+  router.get('/points/balance/:userId', requireAuth, validateParams(userIdParamsSchema), async (req: AuthenticatedRequest, res) => {
     const params = res.locals.validatedParams as { userId: string };
     const userId = params.userId;
+    if (userId !== req.user!.uid && req.user!.admin !== true) {
+      return res.status(403).json({ error: 'No puedes consultar el saldo de otro usuario' });
+    }
 
     try {
       const balance = await withTransaction(pool, (client) => getBalance(client, userId));
@@ -134,7 +137,7 @@ export function createPointsRouter({ pool }: CreatePointsRouterOptions) {
     }
   });
 
-  router.post('/points/credit', requireAuth, validateBody(pointsCreditSchema), async (req: AuthenticatedRequest, res) => {
+  router.post('/points/credit', requireAuth, requireAdmin, validateBody(pointsCreditSchema), async (req: AuthenticatedRequest, res) => {
     const body = res.locals.validatedBody as {
       userId?: string;
       amount: number;
@@ -184,6 +187,9 @@ export function createPointsRouter({ pool }: CreatePointsRouterOptions) {
       reason?: string;
     };
     const userId = String(body.userId ?? req.user!.uid);
+    if (userId !== req.user!.uid && req.user!.admin !== true) {
+      return res.status(403).json({ error: 'No puedes debitar el saldo de otro usuario' });
+    }
     const amount = body.amount;
     const requestId = body.requestId ?? readIdempotencyKey(req.headers) ?? randomUUID();
     const eventId = body.eventId ?? randomUUID();

@@ -89,24 +89,11 @@ Consulta `docs/SYSTEM_INDEX.md` antes de crear un nuevo cliente, ruta, script, p
 
 | Servicio | Responsabilidad |
 |----------|-----------------|
-| `spvApi.ts` | Cliente API con CRUD completo |
+| `spvApi.ts` | Cliente del dashboard para bootstrap y voto; conserva helpers heredados no alineados con rutas backend |
 | `httpClient.ts` | Wrapper de fetch con telemetria |
 | `kanbanService.ts` | Logica del tablero Kanban |
 
-**Operaciones CRUD en spvApi.ts:**
-```typescript
-// CREATE
-createActivity(), castVote(), transferPoints(), creditPoints()
-
-// READ
-getSpvBootstrapState(), getUsers(), getActivities(), getTransactions()
-
-// UPDATE
-updateActivity(), updateTransaction()
-
-// DELETE
-deleteActivity(), deleteTransaction(), cancelTransfer()
-```
+**Contrato actual:** `useSpv.ts` usa `spvApi.ts` para el bootstrap de sesión y el voto autenticado. Los helpers de transferencia/crédito se mantienen sin consumidor en la UI; la transferencia y el crédito manual están deshabilitados hasta resolver identidad y autorización. Las lecturas/CRUD internos de actividades pasan por `neonClient.ts` y `/api/spv/*`, y solo reflejan el resultado tras respuesta exitosa. El mapa completo y las funciones sin ruta están en `docs/SYSTEM_INDEX.md`.
 
 ---
 
@@ -116,7 +103,7 @@ deleteActivity(), deleteTransaction(), cancelTransfer()
 | Router | Endpoints |
 |--------|-----------|
 | `votes.routes.ts` | POST /votes, GET /votes/count |
-| `points.routes.ts` | POST /transfer, POST /credit |
+| `points.routes.ts` | POST /transfer, POST /credit (admin claim), self-scoped debit/balance |
 | `deadLetter.routes.ts` | GET /dlq, POST /dlq/replay |
 | `alerts.routes.ts` | GET /alerts, POST /alerts/ack |
 | `reconciliation.routes.ts` | GET /reconcile, POST /validate |

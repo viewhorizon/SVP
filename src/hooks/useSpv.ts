@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { 
-  castVote, 
-  creditPoints, 
-  getSpvBootstrapState, 
-  transferPoints,
-  getUsers,
-  createActivity,
-  updateActivity,
-  deleteActivity,
+import {
+  castVote,
+  getSpvBootstrapState,
   type User,
-  type Activity,
-  type Transaction 
 } from "../services/spvApi";
 import { getLastRequestTelemetry } from "../services/httpClient";
 import * as neonClient from "../services/neonClient";
@@ -37,17 +29,6 @@ type HistoryEntry = {
 const DEMO_USER_ID = "11111111-1111-1111-1111-111111111111";
 const MAX_DAILY_VOTES = 5;
 const MAX_AVAILABLE_POINTS = 100;
-const HISTORY_STORAGE_KEY = "spv.history.v1";
-
-const INITIAL_ACTIVITIES: ActivityItem[] = [
-  { id: "act-bakery-baker", name: "Panadero", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
-  { id: "act-bakery-sales", name: "Vendedor", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
-  { id: "act-bakery-cleaning", name: "Limpieza", type: "local", pointsPerHour: 1, votes: 0, context: "Panadería" },
-  { id: "act-restaurant-cook", name: "Cocinero", type: "local", pointsPerHour: 1, votes: 0, context: "Restaurante" },
-  { id: "act-restaurant-server", name: "Mesero", type: "local", pointsPerHour: 1, votes: 0, context: "Restaurante" },
-  { id: "act-salon-hairdresser", name: "Peluquero", type: "local", pointsPerHour: 1, votes: 0, context: "Peluquería" },
-  { id: "act-salon-reception", name: "Recepcionista", type: "local", pointsPerHour: 1, votes: 0, context: "Peluquería" },
-];
 
 const buildId = () => crypto.randomUUID();
 const formatDate = () =>
@@ -58,38 +39,15 @@ const formatDate = () =>
     month: "2-digit",
   });
 
-// Load history from localStorage
-const loadHistoryFromStorage = (): HistoryEntry[] => {
-  try {
-    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch {
-    console.log("[v0] Error loading history from localStorage");
-  }
-  return [];
-};
-
-// Save history to localStorage
-const saveHistoryToStorage = (history: HistoryEntry[]) => {
-  try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
-  } catch {
-    console.log("[v0] Error saving history to localStorage");
-  }
-};
 
 export function useSpv() {
-  const [dailyVotesLeft, setDailyVotesLeft] = useState(MAX_DAILY_VOTES);
+  const [dailyVotesLeft, setDailyVotesLeft] = useState(0);
   const [isVoting, setIsVoting] = useState(false);
   const voteInFlightRef = useRef(false);
-  const [pointsAvailable, setPointsAvailable] = useState(42);
-  const [totalPointsAccumulated, setTotalPointsAccumulated] = useState(1240);
-  const [activities, setActivities] = useState(INITIAL_ACTIVITIES);
+  const [pointsAvailable, setPointsAvailable] = useState(0);
+  const [totalPointsAccumulated, setTotalPointsAccumulated] = useState(0);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [receiver, setReceiver] = useState("");
-  const [amount, setAmount] = useState(5);
   const [message, setMessage] = useState("");
   const [lastRequestId, setLastRequestId] = useState("");
   const [healthState, setHealthState] = useState<"checking" | "online" | "offline">("checking");
@@ -97,8 +55,7 @@ export function useSpv() {
   
   // Nuevos estados para CRUD completo
   const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
-  const [transactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [useNeon, setUseNeon] = useState(false);
 
   // Trazabilidad: items estrategicos, tareas y notificaciones de impacto
@@ -118,112 +75,70 @@ export function useSpv() {
     }
   }, []);
 
-  // Cargar historial desde localStorage al inicio
-  useEffect(() => {
-    const storedHistory = loadHistoryFromStorage();
-    if (storedHistory.length > 0) {
-      setHistory(storedHistory);
-    }
-  }, []);
-
-  // Guardar historial en localStorage cuando cambie
-  useEffect(() => {
-    if (history.length > 0) {
-      saveHistoryToStorage(history);
-    }
-  }, [history]);
-
-  // Cargar datos iniciales (usuarios, actividades)
+  // Cargar datos iniciales desde las fuentes persistidas; si fallan, no sustituirlas con mocks.
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // Intentar cargar desde Neon primero
-        const [neonUsers, neonActivities, neonHistory, bootstrap] = await Promise.all([
+        const [neonUsers, neonActivities, neonHistory, bootstrap, neonStrategic, neonTasks] = await Promise.all([
           neonClient.fetchUsers(),
           neonClient.fetchActivities(),
           neonClient.fetchHistory(),
-          getSpvBootstrapState(DEMO_USER_ID),
+          getSpvBootstrapState(),
+          neonClient.fetchStrategicItems(),
+          neonClient.fetchTasks(),
         ]);
 
-        if (neonUsers.length > 0) {
-          setUseNeon(true);
-          setPointsAvailable(bootstrap.available);
-          setTotalPointsAccumulated(bootstrap.historical);
-          setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, bootstrap.remainingVotes)));
-          setRegisteredUsers(neonUsers.map(u => ({
-            id: u.id,
-            username: u.username,
-            displayName: u.name,
-            pointsBalance: u.id === DEMO_USER_ID ? bootstrap.available : u.points_balance,
-          })));
-
-          // Cargar trazabilidad: items estrategicos y tareas
-          const [neonStrategic, neonTasks] = await Promise.all([
-            neonClient.fetchStrategicItems(),
-            neonClient.fetchTasks(),
-          ]);
-          setStrategicItems(neonStrategic);
-          setTasks(neonTasks);
-
-          // Convertir actividades de Neon al formato ActivityItem (preserva linked_task_id)
-          if (neonActivities.length > 0) {
-            setActivities(neonActivities.map(a => ({
-              id: a.id,
-              name: a.name,
-              type: a.type,
-              pointsPerHour: a.points_reward / 10,
-              votes: a.votes_count,
-              context: a.type === "global" ? "Actividad global" : "Actividad local",
-              linkedTaskId: a.linked_task_id ?? null,
-            })));
-          }
-
-          // Cargar historial desde Neon si hay datos, sino desde localStorage
-          if (neonHistory.length > 0) {
-            setHistory(neonHistory.map(h => ({
-              id: h.id,
-              text: h.description,
-              createdAt: new Date(h.created_at).toLocaleString("es-ES", {
-                hour: "2-digit",
-                minute: "2-digit",
-                day: "2-digit",
-                month: "2-digit",
-              }),
-              type: h.type as "vote" | "transfer" | "credit",
-              status: h.status as "success" | "pending" | "error",
-              amount: h.amount,
-            })));
-          }
-          return;
-        }
-      } catch (err) {
-        console.log("[v0] Neon not available, using fallback:", err);
-      }
-
-      // Fallback: cargar desde API o usar mock
-      try {
-        const [bootstrap, users] = await Promise.all([
-          getSpvBootstrapState(DEMO_USER_ID),
-          getUsers(),
-        ]);
+        setUseNeon(true);
         setPointsAvailable(bootstrap.available);
         setTotalPointsAccumulated(bootstrap.historical);
         setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, bootstrap.remainingVotes)));
-        setRegisteredUsers(users);
+        setRegisteredUsers(neonUsers.map((user) => ({
+          id: user.id,
+          username: user.username,
+          displayName: user.name,
+          pointsBalance: user.points_balance,
+        })));
+        setStrategicItems(neonStrategic);
+        setTasks(neonTasks);
+        setActivities(neonActivities.map((activity) => ({
+          id: activity.id,
+          name: activity.name,
+          type: activity.type,
+          pointsPerHour: activity.points_reward / 10,
+          votes: activity.votes_count,
+          context: activity.description ?? (activity.type === "global" ? "Actividad global" : "Actividad local"),
+          linkedTaskId: activity.linked_task_id ?? null,
+        })));
+
+        setHistory(neonHistory.map((entry) => ({
+          id: entry.id,
+          text: entry.description,
+          createdAt: new Date(entry.created_at).toLocaleString("es-ES", {
+            hour: "2-digit",
+            minute: "2-digit",
+            day: "2-digit",
+            month: "2-digit",
+          }),
+          type: entry.type as "vote" | "transfer" | "credit",
+          status: entry.status as "success" | "pending" | "error",
+          amount: entry.amount,
+        })));
       } catch {
-        // Fallback local con usuarios mock
-        setRegisteredUsers([
-          { id: "user-001", username: "carlos", displayName: "Carlos Garcia", pointsBalance: 150 },
-          { id: "user-002", username: "laura", displayName: "Laura Martinez", pointsBalance: 230 },
-          { id: "user-003", username: "miguel", displayName: "Miguel Lopez", pointsBalance: 89 },
-          { id: "user-004", username: "ana", displayName: "Ana Rodriguez", pointsBalance: 320 },
-          { id: "user-005", username: "pedro", displayName: "Pedro Sanchez", pointsBalance: 175 },
-        ]);
+        setUseNeon(false);
+        setPointsAvailable(0);
+        setTotalPointsAccumulated(0);
+        setDailyVotesLeft(0);
+        setRegisteredUsers([]);
+        setActivities([]);
+        setStrategicItems([]);
+        setTasks([]);
+        setMessage("No se pudieron cargar los datos persistidos. No se cargaron datos de demostración.");
       } finally {
         setIsLoading(false);
       }
     };
+
     void loadData();
   }, []);
 
@@ -331,11 +246,8 @@ export function useSpv() {
     try {
       const result = await castVote(activityId, buildId(), activity.type, externalContext);
       setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, result.remainingVotes)));
-      setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
-      setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
-      setRegisteredUsers((prev) => prev.map((user) => user.id === DEMO_USER_ID
-        ? { ...user, pointsBalance: user.pointsBalance + result.pointsGranted }
-        : user));
+      setPointsAvailable((prev) => result.availableBalance ?? prev + result.pointsGranted);
+      setTotalPointsAccumulated((prev) => result.historicalBalance ?? prev + result.pointsGranted);
       setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
       addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`, "vote", result.pointsGranted);
       if (result.impact) {
@@ -365,82 +277,53 @@ export function useSpv() {
     }
   }, [dailyVotesLeft, activities, addHistory, applyImpact]);
 
-  // CREATE - Transferir
-  const handleTransfer = useCallback(async () => {
-    const user = receiver.trim();
-    if (!user || amount <= 0 || amount > pointsAvailable) {
-      setMessage("Datos de transferencia invalidos.");
-      return;
-    }
-    try {
-      await transferPoints({ fromUserId: DEMO_USER_ID, toUserId: user, amount, requestId: buildId() });
-    } catch {
-      // Fallback local
-    }
-    setPointsAvailable((prev) => prev - amount);
-    addHistory(`Tu -> @${user} (-${amount} pts)`, "transfer", amount);
-    setMessage(`Transferencia realizada a ${user}.`);
-    setReceiver("");
-    setAmount(5);
-  }, [receiver, amount, pointsAvailable, addHistory]);
-
-  // CREATE - Recibir
-  const handleReceive = useCallback(async () => {
-    const incoming = 8;
-    try {
-      await creditPoints({ userId: DEMO_USER_ID, amount: incoming, reason: "manual_receive_simulation", requestId: buildId() });
-    } catch {
-      // Fallback local
-    }
-    setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + incoming));
-    setTotalPointsAccumulated((prev) => prev + incoming);
-    addHistory(`@laura -> tu (+${incoming} pts)`, "credit", incoming);
-    setMessage(`Recibiste ${incoming} puntos.`);
-  }, [addHistory]);
-
   // CREATE - Nueva actividad
   const handleCreateActivity = useCallback(async (name: string, type: "global" | "local", context: string) => {
-    const newActivity: ActivityItem = {
-      id: `act-${type}-${Date.now()}`,
-      name,
-      type,
-      pointsPerHour: Math.random() * 2 + 0.5,
-      votes: 0,
-      context,
-    };
-    
-    try {
-      await createActivity(newActivity);
-    } catch {
-      // Fallback local
+    const savedActivity = await neonClient.createActivity(name, type, 10, context);
+    if (!savedActivity) {
+      setMessage("No se pudo guardar la actividad. No se añadió al listado.");
+      return;
     }
-    
-    setActivities((prev) => [...prev, newActivity]);
-    setMessage(`Actividad "${name}" creada.`);
+
+    setActivities((prev) => [...prev, {
+      id: savedActivity.id,
+      name: savedActivity.name,
+      type: savedActivity.type,
+      pointsPerHour: savedActivity.points_reward / 10,
+      votes: savedActivity.votes_count,
+      context: savedActivity.description ?? context,
+      linkedTaskId: savedActivity.linked_task_id ?? null,
+    }]);
+    setMessage(`Actividad "${savedActivity.name}" guardada.`);
   }, []);
 
   // UPDATE - Actualizar actividad
   const handleUpdateActivity = useCallback(async (id: string, updates: Partial<ActivityItem>) => {
-    try {
-      await updateActivity(id, updates as Partial<Activity>);
-    } catch {
-      // Fallback local
+    const name = updates.name?.trim();
+    if (!name) {
+      setMessage("El nombre de la actividad no puede estar vacío.");
+      return;
     }
-    
-    setActivities((prev) => prev.map((act) => act.id === id ? { ...act, ...updates } : act));
-    setMessage("Actividad actualizada.");
+    const updated = await neonClient.updateActivity(id, name);
+    if (!updated) {
+      setMessage("No se pudo guardar el cambio. La actividad no se modificó.");
+      return;
+    }
+
+    setActivities((prev) => prev.map((activity) => activity.id === id ? { ...activity, name } : activity));
+    setMessage("Actividad actualizada en el backend.");
   }, []);
 
   // DELETE - Eliminar actividad
   const handleDeleteActivity = useCallback(async (id: string) => {
-    try {
-      await deleteActivity(id);
-    } catch {
-      // Fallback local
+    const deleted = await neonClient.deleteActivity(id);
+    if (!deleted) {
+      setMessage("No se pudo eliminar la actividad. El listado no se modificó.");
+      return;
     }
-    
-    setActivities((prev) => prev.filter((act) => act.id !== id));
-    setMessage("Actividad eliminada.");
+
+    setActivities((prev) => prev.filter((activity) => activity.id !== id));
+    setMessage("Actividad eliminada del backend.");
   }, []);
 
   // UPDATE - Editar entrada de historial
@@ -462,7 +345,6 @@ export function useSpv() {
     constants: { MAX_DAILY_VOTES, MAX_AVAILABLE_POINTS },
     state: {
       activities,
-      amount,
       dailyVotesLeft,
       isVoting,
       groupedActivities,
@@ -472,11 +354,9 @@ export function useSpv() {
       lastRequestId,
       message,
       pointsAvailable,
-      receiver,
       totalPointsAccumulated,
       todayVotesUsed,
       registeredUsers,
-      transactions,
       isLoading,
       useNeon,
       // Trazabilidad
@@ -485,13 +365,8 @@ export function useSpv() {
       impactNotifications,
     },
     actions: {
-      // READ implícito en bootstrap
-      handleReceive,
-      handleTransfer,
       handleVote,
       runHealthCheck,
-      setAmount,
-      setReceiver,
       // CRUD completo
       handleCreateActivity,
       handleUpdateActivity,

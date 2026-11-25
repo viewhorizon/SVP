@@ -91,40 +91,35 @@ export interface VoteImpact {
 // READ Operations
 // =====================
 
-export async function fetchUsers(): Promise<NeonUser[]> {
-  try {
-    const res = await fetch(`${API_BASE}/spv/users`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.ok ? data.data : [];
-  } catch (error) {
-    console.log("[v0] fetchUsers error:", error);
-    return [];
+async function fetchMvpCollection<T>(path: string, resource: string): Promise<T[]> {
+  const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) throw new Error(`No se pudo cargar ${resource} (${response.status})`);
+
+  const payload: unknown = await response.json();
+  if (
+    !payload
+    || typeof payload !== "object"
+    || !("ok" in payload)
+    || payload.ok !== true
+    || !("data" in payload)
+    || !Array.isArray(payload.data)
+  ) {
+    throw new Error(`Respuesta inválida al cargar ${resource}`);
   }
+
+  return payload.data as T[];
+}
+
+export async function fetchUsers(): Promise<NeonUser[]> {
+  return fetchMvpCollection<NeonUser>("/spv/users", "usuarios");
 }
 
 export async function fetchActivities(): Promise<NeonActivity[]> {
-  try {
-    const res = await fetch(`${API_BASE}/spv/activities`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.ok ? data.data : [];
-  } catch (error) {
-    console.log("[v0] fetchActivities error:", error);
-    return [];
-  }
+  return fetchMvpCollection<NeonActivity>("/spv/activities", "actividades");
 }
 
 export async function fetchHistory(limit = 50): Promise<NeonHistory[]> {
-  try {
-    const res = await fetch(`${API_BASE}/spv/history?limit=${limit}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.ok ? data.data : [];
-  } catch (error) {
-    console.log("[v0] fetchHistory error:", error);
-    return [];
-  }
+  return fetchMvpCollection<NeonHistory>(`/spv/history?limit=${limit}`, "historial");
 }
 
 export async function fetchTransactions(limit = 50): Promise<NeonTransaction[]> {
@@ -140,39 +135,23 @@ export async function fetchTransactions(limit = 50): Promise<NeonTransaction[]> 
 }
 
 export async function fetchStrategicItems(): Promise<NeonStrategicItem[]> {
-  try {
-    const res = await fetch(`${API_BASE}/spv/strategic`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.ok ? data.data : [];
-  } catch (error) {
-    console.log("[v0] fetchStrategicItems error:", error);
-    return [];
-  }
+  return fetchMvpCollection<NeonStrategicItem>("/spv/strategic", "objetivos estratégicos");
 }
 
 export async function fetchTasks(): Promise<NeonTask[]> {
-  try {
-    const res = await fetch(`${API_BASE}/spv/tasks`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.ok ? data.data : [];
-  } catch (error) {
-    console.log("[v0] fetchTasks error:", error);
-    return [];
-  }
+  return fetchMvpCollection<NeonTask>("/spv/tasks", "tareas");
 }
 
 // =====================
 // CREATE Operations
 // =====================
 
-export async function createActivity(name: string, type: "global" | "local" = "local", pointsReward = 10): Promise<NeonActivity | null> {
+export async function createActivity(name: string, type: "global" | "local" = "local", pointsReward = 10, description = ""): Promise<NeonActivity | null> {
   try {
     const res = await fetch(`${API_BASE}/spv/activities`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, type, pointsReward }),
+      body: JSON.stringify({ name, type, pointsReward, description }),
     });
     const data = await res.json();
     return data.ok ? data.data : null;

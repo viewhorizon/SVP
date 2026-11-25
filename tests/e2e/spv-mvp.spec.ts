@@ -1,7 +1,51 @@
 import { expect, test } from '@playwright/test';
 
+const E2E_USER_ID = '11111111-1111-1111-1111-111111111111';
+const E2E_ACTIVITY_ID = '33333333-3333-3333-3333-333333333333';
+
 test.describe('SVP MVP', () => {
   test.beforeEach(async ({ page }) => {
+    await page.route('**/api/points/balance', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ userId: E2E_USER_ID, available: 42, historical: 1240 }),
+    }));
+    await page.route('**/api/spv/users', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [{ id: E2E_USER_ID, username: 'demo', name: 'Demo User', points_balance: 42 }] }),
+    }));
+    await page.route('**/api/spv/activities', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [{
+        id: E2E_ACTIVITY_ID,
+        name: 'Panadero',
+        description: 'Actividad de prueba',
+        type: 'local',
+        votes_count: 0,
+        points_reward: 10,
+        is_active: true,
+        linked_task_id: null,
+        slug: 'panadero',
+        created_at: '2026-01-01T00:00:00.000Z',
+      }] }),
+    }));
+    await page.route('**/api/spv/history', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [] }),
+    }));
+    await page.route('**/api/spv/strategic', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [] }),
+    }));
+    await page.route('**/api/spv/tasks', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [] }),
+    }));
     await page.goto('/');
     await page.waitForLoadState('networkidle');
   });
@@ -23,7 +67,7 @@ test.describe('SVP MVP', () => {
   });
 
   test('shows disconnected inventory and runs a simulation without external sync', async ({ page }) => {
-    await page.route('**/api/points/balance/*', (route) => route.fulfill({
+    await page.route('**/api/points/balance', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ available: 42, historical: 1240 }),
@@ -66,7 +110,9 @@ test.describe('SVP MVP', () => {
 
   test('switches across the primary tabs', async ({ page }) => {
     await page.getByRole('button', { name: /Puntos/ }).click();
-    await expect(page.getByText('Transferir Puntos')).toBeVisible();
+    await expect(page.getByText('Transferencias')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Transferencia no disponible' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Crédito no disponible' })).toBeDisabled();
 
     await page.getByRole('button', { name: /Historial/ }).click();
     await expect(page.getByText('Historial de Transacciones')).toBeVisible();
@@ -76,7 +122,7 @@ test.describe('SVP MVP', () => {
   });
 
   test('does not show more than five votes when the backend rejects the next vote', async ({ page }) => {
-    await page.route('**/api/points/balance/*', (route) => route.fulfill({
+    await page.route('**/api/points/balance', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ available: 42, historical: 1240 }),

@@ -11,7 +11,8 @@
 
 - `GET /health` responde 200
 - `GET /docs` carga Swagger UI
-- `POST /api/points/credit` valida idempotencia con `Idempotency-Key`
+- `POST /api/points/credit` requiere claim Firebase `admin: true` y valida idempotencia con `Idempotency-Key`
+- Confirmar que débitos y consultas `balance/:userId` a otra cuenta requieren claim admin
 - `POST /api/webhooks/points/credit` valida HMAC (`x-webhook-timestamp`, `x-webhook-signature`)
 
 ## Validaciones Minimas UI

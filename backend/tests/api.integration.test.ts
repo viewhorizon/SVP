@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 import { createVotesRouter } from '../src/routes/svp/votes.routes';
 import { createPointsRouter } from '../src/routes/points.routes';
+import type { AuthenticatedRequest } from '../src/middleware/requireAuth';
 import { createFakeSpvPool } from './helpers/fakeSpvPool';
 import { clearWebhookReplayGuardForTests } from '../src/services/webhookReplayGuard';
 
@@ -15,6 +16,13 @@ const ACTIVITY_A = '33333333-3333-3333-3333-333333333333';
 function createTestApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    const testAdminToken = /^Bearer test-admin:(.+)$/.exec(req.headers.authorization ?? "");
+    if (testAdminToken) {
+      (req as AuthenticatedRequest).user = { uid: testAdminToken[1], admin: true };
+    }
+    next();
+  });
 
   const fakePool = createFakeSpvPool() as unknown as Pool;
   app.use('/api/svp', createVotesRouter({ pool: fakePool }));
@@ -137,7 +145,7 @@ describe('SPV API integration', () => {
 
     const toBalanceResponse = await request(app)
       .get(`/api/points/balance/${USER_B}`)
-      .set('Authorization', `Bearer dev:${USER_A}`);
+      .set('Authorization', `Bearer test-admin:${USER_A}`);
 
     expect(fromBalanceResponse.status).toBe(200);
     expect(toBalanceResponse.status).toBe(200);
@@ -145,18 +153,38 @@ describe('SPV API integration', () => {
     expect(toBalanceResponse.body.available).toBe(2);
   });
 
+  it('requires an admin claim for point credits and blocks cross-user debits', async () => {
+    const app = createTestApp();
+
+    const creditResponse = await request(app)
+      .post('/api/points/credit')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ userId: USER_B, amount: 1 });
+    const debitResponse = await request(app)
+      .post('/api/points/debit')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ userId: USER_B, amount: 1 });
+    const balanceResponse = await request(app)
+      .get(`/api/points/balance/${USER_B}`)
+      .set('Authorization', `Bearer dev:${USER_A}`);
+
+    expect(creditResponse.status).toBe(403);
+    expect(debitResponse.status).toBe(403);
+    expect(balanceResponse.status).toBe(403);
+  });
+
   it('idempotency: same requestId on credit does not duplicate balance changes', async () => {
     const app = createTestApp();
 
     const firstResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .set('Idempotency-Key', 'credit-demo-001')
       .send({ amount: 7 });
 
     const replayResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .set('Idempotency-Key', 'credit-demo-001')
       .send({ amount: 7 });
 
@@ -176,7 +204,7 @@ describe('SPV API integration', () => {
 
     const creditResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .send({ amount: 5, requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' });
 
     expect(creditResponse.status).toBe(201);
@@ -304,7 +332,7 @@ describe('SPV API integration', () => {
 
     const response = await request(app)
       .get('/api/points/balance/99999999-9999-4999-8999-999999999999')
-      .set('Authorization', `Bearer dev:${USER_A}`);
+      .set('Authorization', `Bearer test-admin:${USER_A}`);
 
     expect(response.status).toBe(200);
     expect(response.body.available).toBe(0);

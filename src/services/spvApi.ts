@@ -19,6 +19,8 @@ export interface VoteImpact {
 export interface VoteResult {
   pointsGranted: number;
   remainingVotes: number;
+  availableBalance?: number;
+  historicalBalance?: number;
   impact: VoteImpact | null;
 }
 
@@ -93,18 +95,17 @@ type VoteLimitsResponse = {
   usedVotes?: number;
 };
 
-// EXTERNAL INTEGRATION ADAPTER
-// This module exposes the protected activity/vote/points contract used by the dashboard
-// and external platforms. Votes use /api/svp/votes; other resource endpoints remain
-// independently versioned and should only be changed with their consumers.
+// Dashboard API adapter. The session-scoped balance and canonical vote routes are active.
+// Other resource helpers retain older paths and response shapes; see docs/SYSTEM_INDEX.md
+// before reusing them because several do not match the routes currently mounted by the backend.
 
 // =====================
 // READ Operations
 // =====================
 
-export async function getSpvBootstrapState(userId: string): Promise<SpvBootstrapState> {
+export async function getSpvBootstrapState(_userId?: string): Promise<SpvBootstrapState> {
   const [balance, voteCount, voteLimits] = await Promise.all([
-    requestJSON<BalanceResponse>(`/api/points/balance/${userId}`),
+    requestJSON<BalanceResponse>("/api/points/balance"),
     requestJSON<VoteCountResponse>("/api/svp/votes/count"),
     requestJSON<VoteLimitsResponse>("/api/svp/votes/limits"),
   ]);
@@ -178,6 +179,7 @@ export async function getTableData(tableName: string): Promise<Record<string, un
 type VotePayload = {
   pointsGranted?: number;
   limits?: { remainingVotes?: number };
+  balance?: { availablePoints?: unknown; lifetimePoints?: unknown };
   impact?: VoteImpact | null;
 };
 
@@ -203,26 +205,42 @@ export async function castVote(
   return {
     pointsGranted: Math.max(0, asNumber(payload.pointsGranted, 0)),
     remainingVotes: Math.max(0, asNumber(payload.limits?.remainingVotes, MAX_DAILY_VOTES)),
+    availableBalance: pickFirstFinite(payload.balance?.availablePoints) ?? undefined,
+    historicalBalance: pickFirstFinite(payload.balance?.lifetimePoints) ?? undefined,
     impact: payload.impact ?? null,
   };
 }
 
-type TransferPayload = { fromUserId: string; toUserId: string; amount: number; requestId: string };
+type TransferPayload = { toUserId: string; amount: number; requestId: string };
+type PointsBalancePayload = { availablePoints?: unknown; lifetimePoints?: unknown };
+type PointsBalanceSnapshot = { available?: number; historical?: number };
+type TransferResponse = { balances?: { from?: PointsBalancePayload } };
+type CreditResponse = { balance?: PointsBalancePayload };
 
-export async function transferPoints(payload: TransferPayload): Promise<void> {
-  await requestJSON("/api/points/transfer", {
+export async function transferPoints(payload: TransferPayload): Promise<PointsBalanceSnapshot> {
+  const result = await requestJSON<TransferResponse>("/api/points/transfer", {
     method: "POST",
-    body: JSON.stringify({ ...payload, request_id: payload.requestId }),
+    body: JSON.stringify({ toUserId: payload.toUserId, amount: payload.amount, requestId: payload.requestId }),
   });
+
+  return {
+    available: pickFirstFinite(result.balances?.from?.availablePoints) ?? undefined,
+    historical: pickFirstFinite(result.balances?.from?.lifetimePoints) ?? undefined,
+  };
 }
 
 type CreditPayload = { userId: string; amount: number; reason: string; requestId: string };
 
-export async function creditPoints(payload: CreditPayload): Promise<void> {
-  await requestJSON("/api/points/credit", {
+export async function creditPoints(payload: CreditPayload): Promise<PointsBalanceSnapshot> {
+  const result = await requestJSON<CreditResponse>("/api/points/credit", {
     method: "POST",
     body: JSON.stringify({ ...payload, request_id: payload.requestId }),
   });
+
+  return {
+    available: pickFirstFinite(result.balance?.availablePoints) ?? undefined,
+    historical: pickFirstFinite(result.balance?.lifetimePoints) ?? undefined,
+  };
 }
 
 export async function createActivity(activity: Omit<Activity, "id" | "createdAt" | "updatedAt">): Promise<Activity> {

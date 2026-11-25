@@ -29,8 +29,8 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [~] MVC clásico completo: existe separación Controller/Service/Model funcional, pero no hay clases o directorios MVC explícitos; las rutas contienen parte de la orquestación de transacciones.
 - [ ] Contratos tipados compartidos entre frontend y backend; actualmente hay interfaces duplicadas en frontend y schemas/backend separados.
 - [x] Se creó `docs/SYSTEM_INDEX.md` como índice canónico; los runners históricos quedan documentados y no se modifican sin decisión explícita.
-- [x] `spvApi.ts` fue verificado como adaptador de integración externa, no como script descartable; conserva el contrato de plataformas suscritas.
-- [x] La arquitectura MVC queda indexada como `vista → hook → cliente apropiado (externo o interno) → controlador → modelo/Neon`; no se congela un módulo fundamental sin evidencia de consumidores.
+- [~] `spvApi.ts` tiene un mapa función→consumidor→ruta→schema→tablas en `docs/SYSTEM_INDEX.md`; el único consumidor encontrado es interno (`useSpv.ts`). No hay evidencia local de suscriptores externos ni se afirma compatibilidad fuera del repositorio.
+- [x] La arquitectura MVC queda indexada como `vista → hook → cliente apropiado → controlador → modelo/Neon`; las funciones sin ruta están marcadas y el adaptador no se eliminó por suposición.
 
 ### 2. Frontend con propósito
 
@@ -42,18 +42,21 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [ ] Persistir el catálogo dominio-actividad en backend antes de describirlo como administración productiva.
 - [x] Health API muestra disponibilidad del backend y base de datos.
 - [x] Paneles operativos exponen carga, errores, replay, alertas y conciliación.
-- [~] Algunos fallbacks muestran usuarios mock cuando API falla (`src/services/spvApi.ts`, `src/hooks/useSpv.ts`); válido para demo, no válido como estado de producción.
-- [~] Historial, vista y trazabilidad usan `localStorage`; es apropiado para preferencias/local UX, pero no debe ser la fuente de verdad de datos de negocio.
-- [ ] El frontend debe mostrar estado `degraded/demo` cuando usa fallback, nunca presentarlo como datos Neon reales.
+- [~] `useSpv.ts` ya no carga usuarios/actividades/saldos mock ni afirma éxito local tras fallos; los helpers históricos de `spvApi.ts` aún contienen fallbacks, pero el hook no los consume.
+- [x] El historial de negocio se carga desde el backend; los eventos recientes de la sesión viven solo en memoria y ya no se restauran desde `localStorage`.
+- [~] Si falla el bootstrap, la UI muestra un mensaje explícito y limpia datos de negocio; falta un estado de degradación estructurado y común a todos los fetchers.
 
 ### 3. Frontend → backend → Neon
 
 - [x] Vite hace proxy de `/api` y `/health` al backend Express.
 - [x] Backend crea `Pool` con `DATABASE_URL` y ejecuta consultas parametrizadas.
 - [x] `/health` ejecuta `SELECT 1` y distingue backend/base de datos no disponible.
-- [~] Las lecturas MVP continúan en `/api/spv/*`; el voto se unificó en `/api/svp/votes` y se valida con pruebas automatizadas. La lectura de `point_rules` en una base Neon desplegada debe confirmarse en el entorno objetivo.
-- [x] Casos inválidos devuelven 400/404 y no mutan datos.
-- [~] Algunas funciones legacy en `spvApi.ts` silencian errores y devuelven `false`, `[]` o `null`.
+- [~] Las lecturas MVP continúan en `/api/spv/*`; voto y bootstrap de puntos usan rutas autenticadas y el saldo de sesión. La lectura de `point_rules` en la base Neon del entorno objetivo debe confirmarse allí.
+- [x] El voto y el CRUD de actividades solo reflejan operaciones confirmadas; no se cargan actividades ficticias si falla el backend.
+- [x] Transferencia y crédito manual están deshabilitados en la UI hasta resolver el vínculo de identidad entre `spv_users` y wallet, y la autorización de emisión.
+- [x] `/api/points/credit` exige el custom claim Firebase `admin: true`; `/api/points/debit` y `GET /api/points/balance/:userId` restringen acceso cruzado sin ese claim, con pruebas.
+- [~] La asignación y revisión de claims admin es operacional y debe configurarse en Firebase antes de permitir emisión de puntos.
+- [~] Los helpers históricos de `spvApi.ts` todavía ocultan errores y devuelven `false`, `[]` o datos locales; no son consumidos por el hook activo.
 - [ ] Migrar errores silenciosos a un resultado discriminado `{ data, error, source }` para distinguir vacío real de backend caído.
 
 ### 4. Paneles de Operaciones y Monitoreo
@@ -95,12 +98,21 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 
 - [x] `npm run check` aprobado.
 - [x] `npm run build` aprobado.
-- [x] API: 17/17 tests aprobados.
-- [x] Cobertura registrada: 60.14% statements, 41.19% branches, 59.21% functions, 62.43% lines (17 tests).
-- [x] E2E alternativo con `agent-browser` verificado.
-- [~] Playwright formal preparado y añadido al CI, pero bloqueado en este VM por `libnspr4.so` ausente.
-- [ ] Ejecutar Playwright en CI y conservar artefactos/reporte.
+- [x] `npm run test:api`: 21/21 tests aprobados; incluye autorización admin para crédito y controles de acceso cruzado.
+- [~] El último snapshot de cobertura corresponde a 17 tests (60.14% statements, 41.19% branches, 59.21% functions, 62.43% lines); no se recalculó con los 21 tests actuales.
+- [~] `npm run test:e2e -- tests/e2e/spv-mvp.spec.ts` no pudo iniciar Chromium: falta `chrome-headless-shell` en la caché de Playwright. La verificación actual con `agent-browser` también quedó bloqueada porque el preview no estaba listo.
+- [ ] Ejecutar Playwright en CI con navegador instalado y conservar artefactos/reporte.
+- [ ] Repetir pruebas funcionales del selector/inventario y transferencias deshabilitadas cuando el preview esté disponible.
 - [ ] Añadir tests de contrato para los cuatro paneles operativos.
+
+### 8. Migraciones y compatibilidad histórica
+
+- [x] Se auditó individualmente `run_migrations.js`, `execute_sql.py`, `execute_migrations.js`, `execute_sprint3_migrations.js`, `migrations_consolidated.js` y `01_run_all_migrations.sql`; propósito, tablas, dependencias y riesgos están registrados en `docs/LEGACY_DECISIONS.md`.
+- [x] Se comprobó que los runners alternos no aparecen invocados desde `package.json` ni `.github/workflows`; la ejecución manual o externa sigue siendo posible.
+- [x] No se ejecutó ni modificó SQL durante esta revisión.
+- [~] `scripts/run_migrations.js` es solo el camino previsto, no una ruta segura: separa por `;`, continúa tras fallos, carece de tracking y omite `20260326` y `20260330`.
+- [~] Los scripts históricos crean esquemas divergentes; `CREATE TABLE IF NOT EXISTS` no migra columnas ya existentes.
+- [ ] Reparar el runner y validar el conjunto completo en una base desechable antes de usarlo en despliegue.
 
 ## Hallazgos priorizados
 
@@ -128,6 +140,6 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 
 El sistema podrá considerarse íntegro para release cuando todos los P0 estén resueltos, cada panel operativo tenga un test de contrato, el flujo de scoring real tenga pruebas API y E2E, los fallbacks estén señalizados como demo y Playwright pase en CI con artefactos guardados.
 
-Última auditoría: 2026-09-06.
+Última auditoría: 2026-11-25.
 
-Validación de esta revisión estructural: `npm run check`, `npm run build` y `npm run test:api` aprobados; 17/17 tests. El índice canónico está en `docs/SYSTEM_INDEX.md`.
+Validación de esta revisión: `npm run check`, `npm run build` y `npm run test:api` aprobados; 21/21 tests. Playwright no inició por ausencia del navegador Chromium esperado y la verificación actual con `agent-browser` quedó bloqueada por preview no listo. El índice canónico está en `docs/SYSTEM_INDEX.md`.

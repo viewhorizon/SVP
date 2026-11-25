@@ -72,7 +72,7 @@ paths:
           description: Balance disponible e historico
   /api/points/balance/{userId}:
     get:
-      summary: Balance por userId
+      summary: Balance por userId, solo propietario o administrador
       security:
         - bearerAuth: []
       parameters:
@@ -84,22 +84,30 @@ paths:
       responses:
         '200':
           description: Balance del usuario
+        '403':
+          description: Se requiere consultar el propio balance o tener claim admin
   /api/points/credit:
     post:
-      summary: Acreditar puntos
+      summary: Acreditar puntos (administrador)
+      description: Requiere un token Firebase verificado con el custom claim admin igual a true.
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Credito aplicado
+        '403':
+          description: Se requiere claim admin
   /api/points/debit:
     post:
       summary: Debitar puntos
+      description: Solo se puede debitar el propio balance; otra cuenta requiere claim Firebase admin igual a true.
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Debito aplicado
+        '403':
+          description: No se puede debitar el balance de otro usuario
         '409':
           description: Saldo insuficiente
   /api/points/transfer:
