@@ -1,132 +1,57 @@
-# Estado de pruebas y guía de continuidad del MVP SVP
+# Estado de pruebas y prioridades del SVP
 
-**Fecha de registro:** 2026-08-22
-**Propósito:** conservar el estado de pruebas comunicado y convertirlo en una guía ejecutable.
+Actualizado: 2026-11-25.
 
-## Respuesta registrada
+Este documento registra resultados observados en el repositorio. “Hay código” o “hay una tarea en el tablero” no equivale a una prueba aprobada.
 
-## Estado de pruebas
+## Resultados verificados en esta revisión
 
-### Vitest + Supertest
+| Revisión | Resultado |
+| --- | --- |
+| `npm run check` | Aprobado |
+| `npm run build` | Aprobado |
+| `npm run test:api` | Aprobado: 23 pruebas en 3 archivos de prueba |
+| Prueba de coherencia del Kanban | Incluida en la suite; revisa que tareas no verificadas no aparezcan como completadas |
+| Interfaz Kanban en navegador | Verificada a 346 × 459, modo claro; la lista muestra estados pendientes y en revisión |
+| `npm run test:e2e -- tests/e2e/spv-mvp.spec.ts` | No pudo iniciar Chromium: falta una biblioteca del sistema (`libnspr4.so`). No es un fallo funcional de una prueba; el resultado E2E sigue sin confirmarse |
 
-- **15/15 pruebas aprobadas** en la última ejecución.
-- Cubren:
-  - Votación y actualización de puntos.
-  - Transferencias entre usuarios.
-  - Saldos.
-  - Idempotencia.
-  - Concurrencia y prevención de sobregiro.
-  - Webhooks con HMAC válido/inválido.
-  - Protección contra replay.
-  - Timestamps expirados.
-  - Parsers y métricas del Kanban.
-- **Cobertura porcentual:** todavía no medida con `--coverage`. Por tanto, no sería correcto afirmar que el proyecto tiene, por ejemplo, 80% de cobertura. El dato disponible actualmente es **100% de aprobación de los tests ejecutados**, no 100% de cobertura de código.
+La cobertura de código tiene una cifra histórica, no actual: el último reporte guardado (2026-09-06) cubrió 17 pruebas y registró 60.14% statements, 41.19% branches, 59.21% functions y 62.43% lines. No usar esos porcentajes como cobertura de las 22 pruebas actuales.
 
-### Playwright
+El workflow `.github/workflows/ci.yml` instala Chromium con sus dependencias, ejecuta Playwright y ahora guarda `playwright-report/` y `test-results/` como artefacto de CI por 14 días. La configuración demuestra que CI intenta correr las pruebas, no que la ejecución más reciente haya pasado; revisar el resultado del workflow antes de cambiar el estado E2E a completado.
 
-Hay **3 pruebas E2E preparadas**:
+## Coherencia del Kanban
 
-1. Renderizado del dashboard y métricas principales.
-2. Navegación entre las pestañas principales.
-3. Carga del historial sin errores cuando el backend no está disponible.
+- Los criterios antiguos de crear tablas `spv_transactions` y `spv_history`, insertar cinco usuarios ficticios y probar transferencias de UI ya no describen el sistema actual. Se reemplazaron por tareas alineadas con `points_wallet`, `points_ledger`, `point_rules`, `point_limits` y `votes`.
+- Las pruebas de API pueden verificar transacciones entre billeteras; eso no hace que las transferencias estén disponibles en la interfaz. Crédito y transferencia siguen deshabilitados hasta resolver identidad y autorización.
+- Las pruebas automatizadas de navegador usan respuestas de prueba; no acreditan que una base Neon productiva esté configurada correctamente.
+- Las tareas ya guardadas en el navegador reciben estos títulos y criterios corregidos, conservando sus notas y estados elegidos por la persona, salvo los estados explícitamente fijados como evidencia por el tablero.
+- Las funciones operativas sí tienen rutas de backend, pero faltan pruebas de contrato de los cuatro paneles. Las rutas vigentes están en `docs/TESTING_SPRINT3.md`.
 
-El preview también fue verificado manualmente con `agent-browser`: navegación, pestañas y flujo de voto. La ejecución completa de Playwright quedó bloqueada por una dependencia del entorno Linux (`libnspr4.so`), no por un fallo funcional del MVP.
+## Plan por prioridad
 
-## Cobertura funcional aproximada
+### P0 — antes de producción
 
-Esta es una estimación de áreas funcionales, no un reporte de líneas de código:
+1. Sustituir o restringir la autenticación de demostración; una simulación no protege cuentas reales.
+2. No ejecutar reintentos ni pruebas de carga en producción sin autorización y un límite seguro.
 
-- **Backend de votos y puntos:** aproximadamente 70–80%.
-- **Seguridad de webhooks/idempotencia:** aproximadamente 80–90%.
-- **Kanban/parser:** aproximadamente 50–60%.
-- **UI principal:** aproximadamente 25–35%.
-- **Trazabilidad Neon actividad → tarea → objetivo:** aproximadamente 30–40%.
-- **Cobertura global funcional estimada:** aproximadamente 50–60%.
+### P1 — siguiente trabajo funcional
 
-Reporte real más reciente ejecutado el 2026-09-06 con `npm run test:coverage`: Statements **60.14% (492/818)**, Branches **41.19% (276/670)**, Functions **59.21% (90/152)** y Lines **62.43% (452/724)**. Se ejecutaron **17/17 tests**; el reporte cubre Vitest y excluye E2E Playwright.
+1. Conseguir una ejecución Playwright aprobada en CI y revisar el reporte descargable.
+2. Añadir pruebas para respuestas correctas y errores de los paneles de eventos fallidos, alertas, carga y revisión de saldos.
+3. Corregir el programa de migraciones y ensayarlo en una base de datos desechable antes de cambiar una base compartida.
+4. Confirmar el esquema de datos activo en cada entorno; no crear tablas históricas por el nombre de una tarea antigua.
 
-## Lo que falta probar
+### P2 — ampliar confianza
 
-### Prioridad alta
+1. Añadir pruebas de navegador para crear/votar actividades y estados de error.
+2. Recalcular cobertura con la suite vigente y guardar el reporte.
+3. Ampliar pruebas de accesibilidad, tamaños de pantalla y rendimiento medido.
 
-- Rutas nuevas: `GET /api/spv/activities`, `GET /api/spv/strategic`, `GET /api/spv/tasks`, `POST /api/svp/votes`.
-- Propagación de progreso: voto → tarea vinculada; tarea → objetivo estratégico; límite máximo de 100%; estados `in-progress` y `done`.
-- Transacciones y rollback cuando falla una operación.
-- Lectura real desde Neon con datos semilla.
-- Voto duplicado y límites diarios desde la nueva ruta MVP.
+## Términos rápidos
 
-### Prioridad media
-
-- Crear, editar y eliminar actividades.
-- Transferencias con usuarios inexistentes.
-- Montos inválidos, negativos o excesivos.
-- Historial y filtros.
-- Notificaciones visuales de impacto y autocierre.
-- Kanban sincronizado con los datos de Neon.
-- Responsive en móvil y desktop.
-
-### Prioridad baja
-
-- Accesibilidad con teclado y lectores de pantalla.
-- Rendimiento y Web Vitals.
-- Pruebas de múltiples sesiones.
-- Pruebas de carga y concurrencia real.
-- Pruebas de despliegue en producción.
-
-## Guía para continuar sin estancarse
-
-1. Resolver el runner de Playwright localmente e instalar las dependencias del sistema indicadas por Playwright; ejecutar `npm run test:e2e`.
-2. Medir cobertura real con `npx vitest run --coverage` y registrar statements, branches, functions y lines.
-3. Completar pruebas de API MVP con casos correctos, inválidos y de error, verificando la cadena de trazabilidad.
-4. Completar E2E: votar, actualizar puntos, mostrar notificación, cambiar progreso en Kanban y probar backend disponible/no disponible.
-5. Actualizar el Kanban: marcar tablas/seed como completadas; poner pruebas API MVP en proceso; separar UI, Neon y pruebas.
-6. Cerrar el MVP cuando API, E2E, cobertura, trazabilidad, build, type-check, responsive y accesibilidad básica estén validados.
-
-## Alcance real de esta plataforma
-
-- Se pueden ejecutar tests locales del repositorio, builds, type-check/lint configurados y pruebas de navegador con `agent-browser`.
-- Playwright requiere navegador y librerías del sistema disponibles en el runner.
-- Las pruebas de producción, carga distribuida y concurrencia a escala requieren infraestructura externa.
-- El porcentaje de tests aprobados no equivale a cobertura de código.
-
-## Hallazgos abiertos para esta iteración
-
-- El backend Express corre separado del preview Vite; ahora dispone del script reproducible `npm run dev:api`. Con `DATABASE_URL` disponible, `/health` respondió `200 healthy/database available` y `/api/spv/strategic` respondió `200` con 3 objetivos y 7 tareas agregadas.
-- Operaciones y Monitoreo deben mostrar estados reales de carga, error y disponibilidad, no asumir que sus endpoints están disponibles.
-- Health API ahora distingue `healthy`, `database_unavailable` y `backend-unreachable`; el estado seguirá sin disponibilidad si Express no se ejecuta junto al preview Vite.
-- Prueba real ejecutada contra Neon el 2026-08-22: voto sobre `Diseño de Landing Page` con usuario `demo` devolvió impacto válido; saldo pasó de 750 a 760, historial registró la operación, `task-4` pasó de 0% a 10% (`in-progress`) y `strategic-2` pasó a 5%.
-- Validaciones negativas ejecutadas tras reiniciar Express: payload incompleto devuelve `400`, puntos negativos con IDs válidos devuelven `400`, usuario inexistente devuelve `404` y actividad inexistente devuelve `404`; no se mutan datos en esos casos.
-- Inventory, CRM y E-commerce son dominios externos suscritos al SVP: originan actividades, pero el controlador SVP valida y registra el voto y la acumulación de valor.
-- La simulación permite seleccionar el dominio y una actividad real cargada desde Neon; envía `externalDomain` y `externalReference` y muestra `operationId`/`SVP_POINTS`.
-- El scoring real corresponde a actividad externa → voto → puntos/valor SVP → historial → tarea → objetivo estratégico. La cotización, comercio o uso como propiedad de inventario gamer queda condicionado a una integración de mercado externa.
-
-## Criterios de evidencia
-
-| Área | Evidencia requerida | Estado |
-|---|---|---|
-| API existente | `npm run test:api` | 17/17 aprobado en ejecución más reciente |
-| Build | `npm run build` | aprobado previamente |
-| API MVP | Supertest para endpoints nuevos | voto real y validaciones 400/404 verificadas; suite existente 15/15 |
-| Build/check | `npm run check` + `npm run build` | aprobado |
-| Cobertura | `npm run test:coverage` | 60.14% statements / 41.19% branches / 59.21% functions / 62.43% lines |
-| Playwright | `npm run test:e2e` | 3 specs preparados; 0 ejecutables por `libnspr4.so` ausente en Chromium |
-| E2E alternativo | `agent-browser` con snapshot y screenshot | verificado: dashboard, pestañas, simulación, voto visible, consola `VOTE`, contador 1/5 y puntos 44/100 |
-| Operaciones | `agent-browser` con modo simulación | paneles renderizan; eventos sintéticos claramente etiquetados |
-| Neon | consulta de trazabilidad y scoring | voto válido propagó puntos, historial, tarea y objetivo; negativos devuelven 400/404 |
-| Operaciones/Monitoreo | estados y endpoints comprobables | aún pendiente de auditoría completa |
-
-## Próximo orden de ejecución
-
-1. Auditar Operaciones y Monitoreo contra las rutas reales.
-2. Añadir tests API formales de trazabilidad y scoring.
-3. Resolver la dependencia `libnspr4.so` del runner Chromium o ejecutar Playwright en un CI con dependencias instaladas.
-4. Repetir la suite E2E formal.
-5. Actualizar las tareas Kanban solo con resultados reproducibles.
-
-## Nota de control
-
-No se debe presentar el selector de simulación como integración productiva. Las actividades que deben recibir puntuación son las actividades reales del SPV, mediante votos autenticados/identificados y persistencia en Neon.
-
----
-
-**Registro:** este documento conserva íntegramente el contenido de la respuesta anterior sobre pruebas, cobertura, pendientes y guía de continuidad, y añade los límites operativos y hallazgos que motivan la siguiente fase.
+- **Prueba de API:** comprueba una solicitud al servidor y su respuesta.
+- **Prueba de navegador (E2E):** usa la interfaz como una persona y comprueba el recorrido completo.
+- **Prueba de carga:** envía tráfico de prueba para observar tiempos y errores; no prueba por sí sola la capacidad de producción.
+- **Conciliación:** compara saldos y movimientos para encontrar diferencias; no las corrige automáticamente.
+- **Programa de migraciones:** aplica cambios de estructura a la base de datos; debe registrar qué aplicó y detenerse ante errores.
+- Para otros términos, ver “Términos en lenguaje sencillo” en `docs/CODE_INTEGRITY_CHECKLIST.md`.

@@ -74,184 +74,161 @@ export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string; isSt
 ];
 
 export const DEFAULT_TASKS: Task[] = [
-  // ========== BACKLOG ESTRATEGICO DE TESTING MVP ==========
+  // ========== VERIFICACION FUNCIONAL MVP ==========
   {
     id: "test-mvp-00",
-    title: "Testing MVP: Sistema de Votos y Puntos",
-    description: "Backlog estrategico que despliega todas las fases de testing del prototipo MVP. Cuando todas las subtareas esten completadas, el prototipo estara validado para produccion.",
+    title: "Cerrar verificación funcional del SVP",
+    description: "Plan de pruebas basado en las funciones que existen hoy; no equivale por sí solo a una aprobación para producción.",
     category: "testing",
     priority: "high",
-    estimated: "40h",
+    estimated: "24h",
     status: "backlog",
     isStrategic: true,
     childTaskIds: ["test-mvp-01", "test-mvp-02", "test-mvp-03", "test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07", "test-mvp-08"],
     acceptanceCriteria: [
-      "100% de subtareas completadas exitosamente",
-      "Todas las operaciones CRUD funcionan correctamente",
-      "Integracion con BD Neon validada",
-      "UI responsive y funcional en todas las pestanas",
-      "Consola de eventos sin duplicados ni errores"
+      "Cada tarea se cierra solo con una prueba o evidencia concreta",
+      "Las pruebas de navegador se ejecutan con el navegador de CI instalado",
+      "Los paneles operativos tienen pruebas de sus solicitudes y respuestas",
+      "Las pruebas usan datos aislados y no escriben en producción"
     ],
     dependencies: [],
-    risks: ["Dependencia de conexion a Neon", "Datos de prueba insuficientes"]
+    risks: ["No hay evidencia guardada de una ejecución E2E verde en CI"]
   },
-  // Fase 1: Infraestructura BD
   {
     id: "test-mvp-01",
-    title: "Crear tablas MVP en Neon",
-    description: "Ejecutar migracion para crear tablas: spv_users, spv_activities, spv_transactions, spv_history",
+    title: "Confirmar el esquema de datos que usa el sistema",
+    description: "Contrastar tablas y reglas actuales de puntos/votos con las migraciones versionadas; no crear las tablas antiguas spv_transactions/spv_history.",
     category: "database",
     priority: "high",
     estimated: "2h",
-    status: "todo",
+    status: "review",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Tabla spv_users creada con campos: id, username, name, email, points_balance",
-      "Tabla spv_activities creada con campos: id, name, type, votes_count, points_reward",
-      "Tabla spv_transactions creada con campos: id, from_user, to_user, amount, type, status",
-      "Tabla spv_history creada con campos: id, user_id, description, type, amount, status, created_at"
+      "Identificar las tablas canónicas points_wallet, points_ledger, point_rules, point_limits y votes",
+      "Confirmar en una base de prueba que las migraciones requeridas están aplicadas",
+      "No confundir historial de eventos con una tabla antigua spv_history"
     ],
     dependencies: [],
-    risks: ["Conexion a Neon fallida"]
+    risks: ["La base de datos de cada entorno puede tener migraciones distintas"]
   },
-  // Fase 2: Seed Data
   {
     id: "test-mvp-02",
-    title: "Poblar datos de prueba iniciales",
-    description: "Insertar usuarios de prueba, actividades y transacciones iniciales para testing",
-    category: "database",
-    priority: "high",
+    title: "Mantener datos de prueba aislados",
+    description: "Usar fixtures y respuestas simuladas solo en pruebas; no insertar usuarios o saldos inventados en la base real.",
+    category: "testing",
+    priority: "medium",
     estimated: "1h",
-    status: "todo",
+    status: "done",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "5 usuarios de prueba con balances variados",
-      "10 actividades de diferentes tipos (global/local)",
-      "20 transacciones historicas de ejemplo"
+      "Las pruebas automatizadas preparan sus propios datos o interceptan la API",
+      "Ningún seed de demostración se presenta como dato real de un usuario"
+    ],
+    dependencies: [],
+    risks: []
+  },
+  {
+    id: "test-mvp-03",
+    title: "Mantener pruebas de API para votos y puntos",
+    description: "Comprobar acceso, límites de voto, saldo, idempotencia y que una cuenta no pueda operar sobre otra.",
+    category: "testing",
+    priority: "high",
+    estimated: "4h",
+    status: "done",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "La suite de API cubre autorización y validación de voto",
+      "Se comprueban límite diario, saldo, idempotencia y operaciones concurrentes",
+      "La suite actual se ejecuta en CI junto con el resto de pruebas de API"
     ],
     dependencies: ["test-mvp-01"],
     risks: []
   },
-  // Fase 3: API Endpoints
-  {
-    id: "test-mvp-03",
-    title: "Conectar API Routes con Neon",
-    description: "Crear endpoints /api/spv/* que lean y escriban a las tablas de Neon",
-    category: "backend",
-    priority: "high",
-    estimated: "4h",
-    status: "todo",
-    parentTaskId: "test-mvp-00",
-    acceptanceCriteria: [
-      "GET /api/spv/users retorna lista de usuarios",
-      "GET /api/spv/activities retorna actividades",
-      "GET /api/spv/history retorna historial",
-      "POST /api/svp/votes registra voto y actualiza puntos",
-      "POST /api/spv/transfer registra transferencia"
-    ],
-    dependencies: ["test-mvp-01", "test-mvp-02"],
-    risks: ["CORS issues", "Timeout en queries"]
-  },
-  // Fase 4: UI Actividades
   {
     id: "test-mvp-04",
-    title: "Test pestana Actividades",
-    description: "Validar CRUD completo de actividades: crear, votar, editar, eliminar",
+    title: "Probar creación y voto desde la pantalla Actividades",
+    description: "Agregar pruebas de navegador para las acciones disponibles; distinguir errores del servidor de una lista vacía.",
     category: "testing",
     priority: "high",
     estimated: "3h",
     status: "todo",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Boton Nueva Actividad crea actividad en BD",
-      "Boton Votar incrementa votos y otorga puntos",
-      "Editar actividad actualiza nombre en BD",
-      "Eliminar actividad la remueve de BD",
-      "Lista se actualiza sin recargar pagina"
+      "La prueba verifica el resultado visible después de crear o votar",
+      "La pantalla comunica claramente los fallos de guardado",
+      "Los datos se preparan con respuestas de prueba y no con cuentas reales"
     ],
     dependencies: ["test-mvp-03"],
     risks: []
   },
-  // Fase 5: UI Puntos
   {
     id: "test-mvp-05",
-    title: "Test pestana Puntos",
-    description: "Validar transferencias entre usuarios con autocomplete funcional",
-    category: "testing",
+    title: "Conservar transferencias y créditos deshabilitados",
+    description: "Las acciones de transferir y acreditar deben permanecer deshabilitadas hasta resolver la identidad de la billetera y los permisos de emisión.",
+    category: "security",
     priority: "high",
-    estimated: "3h",
-    status: "todo",
+    estimated: "1h",
+    status: "done",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Dropdown muestra usuarios de BD filtrados",
-      "Click en usuario autocompleta el campo",
-      "Boton Transferir deduce puntos del emisor",
-      "Boton Transferir acredita puntos al receptor",
-      "Balance se actualiza en tiempo real"
+      "Transferir y acreditar aparecen deshabilitados en la interfaz",
+      "La prueba de navegador comprueba que esos botones no se pueden usar",
+      "No se simula una transferencia exitosa"
     ],
-    dependencies: ["test-mvp-03"],
-    risks: ["Usuario sin puntos suficientes"]
+    dependencies: [],
+    risks: ["Habilitarlas antes de resolver identidad/permisos permitiría errores de saldo"]
   },
-  // Fase 6: UI Historial
   {
     id: "test-mvp-06",
-    title: "Test pestana Historial",
-    description: "Validar carga desde BD y localStorage, edicion y eliminacion",
+    title: "Verificar la pantalla Historial ante errores de conexión",
+    description: "Comprobar que el historial carga cuando el backend responde y que muestra un estado entendible si no está disponible.",
     category: "testing",
     priority: "medium",
     estimated: "2h",
-    status: "todo",
+    status: "review",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Historial carga desde BD al iniciar",
-      "Fallback a localStorage si BD no disponible",
-      "Vista tabla muestra todas las columnas",
-      "Editar entrada actualiza descripcion",
-      "Eliminar entrada la remueve de BD",
-      "Exportar CSV descarga archivo correcto"
+      "La pantalla no se rompe si falla el backend",
+      "Un error de conexión no se presenta como historial vacío confirmado",
+      "La prueba de navegador queda aprobada en CI"
     ],
     dependencies: ["test-mvp-03"],
     risks: []
   },
-  // Fase 7: UI Operaciones
   {
     id: "test-mvp-07",
-    title: "Test pestana Operaciones",
-    description: "Validar paneles de dead-letter, alertas, load test y reconciliacion",
+    title: "Agregar pruebas a los cuatro paneles de Operaciones",
+    description: "Probar las respuestas del servidor para eventos fallidos, alertas, carga y revisión de saldos; la conexión visual por sí sola no certifica el flujo.",
     category: "testing",
-    priority: "medium",
+    priority: "high",
     estimated: "4h",
     status: "todo",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Dead Letter Panel muestra eventos simulados",
-      "Boton Replay reintenta evento correctamente",
-      "Alertas Panel muestra alertas de sistema",
-      "Load Test ejecuta y muestra metricas",
-      "Reconciliacion muestra validaciones"
+      "Cada panel tiene al menos una prueba de respuesta correcta y una de error",
+      "El reintento de evento fallido confirma el resultado y evita duplicados",
+      "La prueba de carga solo se ejecuta contra un entorno aislado",
+      "La revisión de saldos muestra discrepancias sin modificar registros"
     ],
     dependencies: ["test-mvp-03"],
-    risks: ["Datos simulados insuficientes"]
+    risks: ["Una prueba de carga podría afectar un servicio real si se apunta al entorno equivocado"]
   },
-  // Fase 8: Integracion Final
   {
     id: "test-mvp-08",
-    title: "Validacion E2E del MVP",
-    description: "Test completo del flujo: crear actividad -> votar -> recibir puntos -> transferir -> ver historial",
+    title: "Aprobar el recorrido principal en navegador",
+    description: "Probar con Playwright lo que una persona ve y hace; no confundir una prueba de API llamada E2E con una prueba real de interfaz.",
     category: "testing",
     priority: "high",
     estimated: "3h",
     status: "todo",
     parentTaskId: "test-mvp-00",
     acceptanceCriteria: [
-      "Flujo completo sin errores en consola",
-      "Datos persisten al recargar pagina",
-      "Consola de eventos muestra todos los pasos",
-      "Health API muestra Disponible",
-      "Sin duplicados en eventos"
+      "La prueba navega por la interfaz y completa el recorrido de voto",
+      "Comprueba el mensaje de éxito y los datos visibles al recargar",
+      "La ejecución de Playwright termina aprobada en CI y guarda el reporte"
     ],
     dependencies: ["test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07"],
-    risks: ["Regresiones en fases anteriores"]
+    risks: ["La interfaz usa servicios de prueba; no demuestra por sí sola el estado de Neon productivo"]
   },
   // ========== TAREAS EXISTENTES ==========
   { id: "k-01", title: "Alcance definido: SVP + Inventario + Actividades + LiveOps + Unity", description: "Definir el alcance completo del sistema SPV integrado con Inventario y Parque 3D", category: "planning", priority: "high", estimated: "8h", status: "done" },
@@ -319,127 +296,121 @@ export const DEFAULT_TASKS: Task[] = [
   { id: "nxt-12", title: "Panel de trazabilidad por requestId y eventId", description: "Vista operativa para soporte y auditoria de transacciones", category: "monitoring", priority: "medium", estimated: "5h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-13", title: "Monitor transaccional base del SVP", description: "Endpoint consolidado para consultar transacciones cross-system con filtros", category: "monitoring", priority: "medium", estimated: "3h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-14", title: "Stream en tiempo real para monitor transaccional", description: "Agregar endpoint SSE para snapshots periodicos de transacciones del SVP", category: "monitoring", priority: "medium", estimated: "4h", status: "done", roadmapPage: "sprint-2" },
-  { 
-    id: "sp3-01", 
-    title: "Hash audit endpoint firmado", 
-    description: "Exponer verificacion de integridad con firma de servidor y hashVersion", 
-    category: "ledger", 
-    priority: "high", 
-    estimated: "6h", 
-    status: "done", 
+  {
+    id: "sp3-01",
+    title: "Confirmar si hace falta firmar la auditoría del ledger",
+    description: "El endpoint firmado y sus garantías de rendimiento no están demostrados en el código revisado; mantener pendiente hasta decidir e implementar el contrato.",
+    category: "ledger",
+    priority: "medium",
+    estimated: "6h",
+    status: "todo",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "Endpoint GET /api/v1/audit/hash/{ledgerId} retorna hash verificable",
-      "Respuesta incluye hashVersion, timestamp y firma del servidor",
-      "Verificacion de cadena completa en menos de 500ms para 10k registros"
+      "Decidir y documentar si se requiere una firma además del hash de integridad existente",
+      "Si se requiere, probar el endpoint, su firma y el comportamiento con datos manipulados",
+      "No declarar una meta de rendimiento sin medición reproducible"
     ],
     dependencies: ["nxt-01", "nxt-02"],
-    risks: ["Rendimiento degradado con ledgers muy grandes"]
+    risks: ["La firma añade complejidad y debe responder a una necesidad real"]
   },
-  { 
-    id: "sp3-02", 
-    title: "Outbox dead-letter replay seguro", 
-    description: "Herramienta para reintentar eventos DLQ con control de idempotencia", 
-    category: "integration", 
-    priority: "high", 
-    estimated: "7h", 
-    status: "done", 
+  {
+    id: "sp3-02",
+    title: "Probar el reintento seguro de eventos fallidos",
+    description: "La API de reintento existe; falta comprobar en pruebas límites, duplicados, selección y respuesta del panel.",
+    category: "integration",
+    priority: "high",
+    estimated: "7h",
+    status: "review",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "Panel muestra eventos en DLQ con filtros por fecha y tipo",
-      "Boton de replay individual y masivo con confirmacion",
-      "Control de idempotencia previene duplicados",
-      "Maximo 3 reintentos por evento"
+      "La lista y el reintento usan los endpoints actuales de eventos fallidos",
+      "Un mismo evento no se contabiliza dos veces al reintentarlo",
+      "Se documenta el límite real de reintentos y se prueba"
     ],
     dependencies: ["nxt-03", "nxt-04"],
-    risks: ["Eventos corruptos pueden bloquear cola", "Replay masivo puede saturar sistema destino"]
+    risks: ["Reintentar en masa puede saturar el sistema receptor"]
   },
-  { 
-    id: "sp3-03", 
-    title: "Alertas operativas de dispatcher", 
-    description: "Disparar alertas por backlog envejecido y fallos consecutivos", 
-    category: "ops", 
-    priority: "medium", 
-    estimated: "5h", 
-    status: "done", 
+  {
+    id: "sp3-03",
+    title: "Probar avisos por problemas del dispatcher",
+    description: "La API calcula avisos de cola atrasada, fallos y eventos fallidos; verificar umbrales y persistencia antes de cerrar.",
+    category: "ops",
+    priority: "medium",
+    estimated: "5h",
+    status: "review",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "Alerta si backlog supera 1000 eventos pendientes",
-      "Alerta si evento tiene mas de 5 minutos sin procesar",
-      "Alerta despues de 3 fallos consecutivos",
-      "Notificacion via webhook configurable"
+      "La prueba cubre los umbrales configurados realmente por el servidor",
+      "Se verifica qué avisos se guardan y cuáles solo se muestran",
+      "No se afirma notificación por webhook si no está conectada"
     ],
     dependencies: ["nxt-04"],
-    risks: ["Alertas falsas por picos temporales"]
+    risks: ["Umbrales mal calibrados pueden generar avisos innecesarios"]
   },
-  { 
-    id: "sp3-04", 
-    title: "Rate limit distribuido", 
-    description: "Agregar opcion Redis para rate limiting multi-instancia", 
-    category: "security", 
-    priority: "medium", 
-    estimated: "6h", 
-    status: "done", 
+  {
+    id: "sp3-04",
+    title: "Decidir si hace falta limitar solicitudes entre servidores",
+    description: "No hay evidencia de un limitador compartido con Redis/Upstash en la implementación actual; mantener pendiente hasta necesitar varias instancias.",
+    category: "security",
+    priority: "medium",
+    estimated: "6h",
+    status: "todo",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "Soporte Upstash Redis como backend de rate limiting",
-      "Fallback a in-memory si Redis no disponible",
-      "Limites configurables: votos (100/h), puntos (50/h), eventos (200/h)",
-      "Dashboard muestra uso actual vs limite"
+      "Definir si el despliegue usa más de una instancia y necesita un contador compartido",
+      "Si se implementa, probar límites y comportamiento cuando el servicio de conteo falla",
+      "No mostrar un panel de consumo que no exista"
     ],
     dependencies: [],
-    risks: ["Latencia adicional por llamadas a Redis", "Inconsistencia temporal entre instancias"]
+    risks: ["Agregar un servicio externo sin necesidad aumenta costo y fallos posibles"]
   },
-  { 
-    id: "sp3-05", 
-    title: "Suite automatizada de carga para votos/eventos", 
-    description: "Escenarios de stress para throughput y latencia", 
-    category: "testing", 
-    priority: "medium", 
-    estimated: "8h", 
-    status: "done", 
+  {
+    id: "sp3-05",
+    title: "Validar con seguridad la herramienta de prueba de carga",
+    description: "Existe una herramienta para enviar solicitudes de prueba; no se ha demostrado el rendimiento objetivo ni una prueba de resistencia.",
+    category: "testing",
+    priority: "medium",
+    estimated: "8h",
+    status: "review",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "4 escenarios de prueba: baseline, stress, spike, endurance",
-      "Metricas de p50, p95, p99 latencia",
-      "Throughput objetivo: 1000 votos/segundo",
-      "Reporte exportable en JSON"
+      "Probar únicamente contra un entorno de pruebas autorizado",
+      "Registrar cantidad de solicitudes y tiempos de respuesta que la herramienta entrega",
+      "No declarar capacidad de producción sin medición repetible y aislada"
     ],
-    dependencies: ["sp3-04"],
-    risks: ["Pruebas pueden afectar ambiente productivo si no se aislan"]
+    dependencies: [],
+    risks: ["Una prueba dirigida a producción puede interrumpir el servicio"]
   },
-  { 
-    id: "sp3-06", 
-    title: "Panel de conciliacion contable", 
-    description: "Vista para verificar invariantes de ledger y desbalances", 
-    category: "monitoring", 
-    priority: "high", 
-    estimated: "7h", 
-    status: "done", 
+  {
+    id: "sp3-06",
+    title: "Comprobar el informe de revisión de saldos y movimientos",
+    description: "La API genera informes y revisiones manuales del ledger; comprobar qué inconsistencias detecta y dejar claro que no se ejecuta cada hora automáticamente.",
+    category: "monitoring",
+    priority: "high",
+    estimated: "7h",
+    status: "review",
     roadmapPage: "sprint-3",
     acceptanceCriteria: [
-      "5 validaciones contables: balance total, hash chain, limites, orphan refs, duplicados",
-      "Indicador visual verde/amarillo/rojo por validacion",
-      "Exportacion CSV de discrepancias encontradas",
-      "Reconciliacion automatica cada hora"
+      "Probar revisión de saldos, cadena de hashes, transacciones y registros huérfanos",
+      "Exportar el informe y comprobar que incluye las discrepancias encontradas",
+      "No indicar ejecución automática por hora: el código expone ejecución bajo demanda"
     ],
-    dependencies: ["nxt-01", "nxt-02", "sp3-01"],
-    risks: ["Discrepancias historicas pueden requerir correccion manual"]
+    dependencies: ["nxt-01", "nxt-02"],
+    risks: ["Corregir datos contables requiere aprobación y no debe hacerse automáticamente"]
   },
 ];
 
 const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "spv-04": "done",
   "spv-05": "done",
-  // Estado respaldado por la evidencia de testing MVP documentada en docs/TESTING_MVP_STATUS.md.
-  "test-mvp-01": "done",
+  // Estados alineados con el alcance vigente; review significa implementado pero pendiente de evidencia.
+  "test-mvp-01": "review",
   "test-mvp-02": "done",
   "test-mvp-03": "done",
-  "test-mvp-04": "in-progress",
-  "test-mvp-05": "todo",
-  "test-mvp-06": "done",
-  "test-mvp-07": "in-progress",
-  "test-mvp-08": "in-progress",
+  "test-mvp-05": "done",
+  "test-mvp-06": "review",
+  "test-mvp-07": "todo",
+  "test-mvp-08": "todo",
   "kan-03": "done",
   "kan-05": "done",
   "kan-06": "done",
@@ -474,12 +445,12 @@ const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "nxt-11": "done",
   "nxt-12": "done",
   "nxt-14": "done",
-  "sp3-01": "done",
-  "sp3-02": "done",
-  "sp3-03": "done",
-  "sp3-04": "done",
-  "sp3-05": "done",
-  "sp3-06": "done",
+  "sp3-01": "todo",
+  "sp3-02": "review",
+  "sp3-03": "review",
+  "sp3-04": "todo",
+  "sp3-05": "review",
+  "sp3-06": "review",
 };
 
 const applyTaskStatusOverrides = (tasks: Task[]): Task[] =>
@@ -552,9 +523,19 @@ export const safeReadTasks = (): Task[] => {
     if (!raw) return applyTaskStatusOverrides(DEFAULT_TASKS);
     const parsed = JSON.parse(raw) as Task[];
     if (Array.isArray(parsed) && parsed.length >= 20) {
-      // Merge by id so newly added sprint tasks appear without losing user edits.
+      // Refresh corrected seed records while preserving their user-managed status and notes.
       const persistedById = new Map(parsed.map((task) => [task.id, task]));
-      const merged = DEFAULT_TASKS.map((seed) => persistedById.get(seed.id) ?? seed);
+      const correctedSeedIds = new Set([
+        "test-mvp-00", "test-mvp-01", "test-mvp-02", "test-mvp-03",
+        "test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07", "test-mvp-08",
+        "sp3-01", "sp3-02", "sp3-03", "sp3-04", "sp3-05", "sp3-06",
+      ]);
+      const merged = DEFAULT_TASKS.map((seed) => {
+        const persisted = persistedById.get(seed.id);
+        if (!persisted) return seed;
+        if (!correctedSeedIds.has(seed.id)) return persisted;
+        return { ...persisted, ...seed, status: persisted.status, notes: persisted.notes };
+      });
       const custom = parsed.filter((task) => !merged.some((seed) => seed.id === task.id));
       return applyTaskStatusOverrides([...merged, ...custom]);
     }

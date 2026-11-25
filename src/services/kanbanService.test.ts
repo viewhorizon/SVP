@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildFodaCoverageCounters, buildPlanningAnalysis, convertRequirementsTextToTasks, parseImportContent, type Task } from "./kanbanService";
+import { describe, expect, it, vi } from "vitest";
+import { buildFodaCoverageCounters, buildPlanningAnalysis, convertRequirementsTextToTasks, DEFAULT_TASKS, parseImportContent, safeReadTasks, type Task } from "./kanbanService";
 
 describe("kanbanService parsers", () => {
   it("parsea JSON con backlog/sprintlog", () => {
@@ -90,5 +90,58 @@ describe("kanbanService metrics", () => {
     const counters = buildFodaCoverageCounters(sampleTasks);
     expect(counters.fortalezas).toBe(1);
     expect(counters.debilidades).toBe(1);
+  });
+});
+
+describe("kanbanService verification backlog", () => {
+  it("does not mark unsupported or unverified sprint claims as complete", () => {
+    const tasks = safeReadTasks();
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+
+    expect(byId.get("test-mvp-01")?.status).toBe("review");
+    expect(byId.get("test-mvp-05")?.status).toBe("done");
+    expect(byId.get("test-mvp-07")?.status).toBe("todo");
+    expect(byId.get("test-mvp-08")?.status).toBe("todo");
+    expect(byId.get("sp3-01")?.status).toBe("todo");
+    expect(byId.get("sp3-04")?.status).toBe("todo");
+    expect(byId.get("sp3-06")?.acceptanceCriteria?.join(" ")).toContain("bajo demanda");
+    expect(byId.get("test-mvp-05")?.description).toContain("deshabilitadas");
+    expect(DEFAULT_TASKS.some((task) => task.id === "test-mvp-00")).toBe(true);
+  });
+
+  it("refreshes corrected saved tasks while preserving notes, user status, and custom tasks", () => {
+    const savedActivityTask = {
+      ...DEFAULT_TASKS.find((task) => task.id === "test-mvp-04")!,
+      title: "Legacy activity check",
+      description: "Old persisted description",
+      status: "in-progress" as const,
+      notes: "Keep my note",
+    };
+    const customTasks = Array.from({ length: 20 }, (_, index): Task => ({
+      id: `custom-${index}`,
+      title: `Custom task ${index}`,
+      description: "User-created task",
+      category: "custom",
+      priority: "low",
+      estimated: "1h",
+      status: "todo",
+    }));
+
+    vi.stubGlobal("localStorage", {
+      getItem: () => JSON.stringify([savedActivityTask, ...customTasks]),
+      setItem: () => undefined,
+    });
+
+    try {
+      const tasks = safeReadTasks();
+      const migrated = tasks.find((task) => task.id === "test-mvp-04");
+
+      expect(migrated?.title).toBe("Probar creación y voto desde la pantalla Actividades");
+      expect(migrated?.status).toBe("in-progress");
+      expect(migrated?.notes).toBe("Keep my note");
+      expect(tasks.some((task) => task.id === "custom-19")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

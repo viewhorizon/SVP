@@ -93,6 +93,16 @@ No declarar integridad total hasta que los siete puntos anteriores tengan eviden
 - Se completó el mapa función→consumidor→ruta→schema→tablas de `spvApi.ts` y el registro individual de los ejecutores/migraciones SQL en `docs/SYSTEM_INDEX.md` y `docs/LEGACY_DECISIONS.md`.
 - La UI ya no inventa usuarios/actividades/saldos iniciales; CRUD interno solo refleja éxito persistido. Transferencias/créditos manuales quedan deshabilitados hasta resolver mapeo de identidad y autorización.
 - `/api/points/credit` ahora requiere claim Firebase `admin: true`; débitos y lecturas de balance por ID no permiten operar sobre otra cuenta sin admin.
-- Verificación ejecutada: `npm run check`, `npm run build` y `npm run test:api` (21/21) pasaron.
-- Playwright quedó bloqueado porque falta el ejecutable Chromium esperado; `agent-browser` no pudo conectar porque el preview no estaba listo. La prueba funcional de UI de esta iteración queda pendiente.
+- Verificación ejecutada en esa revisión: `npm run check`, `npm run build` y `npm run test:api` (21/21) pasaron.
+- En esa ejecución Playwright quedó bloqueado porque faltaba Chromium y `agent-browser` no pudo conectar al preview; véase la actualización de evidencia más reciente al final de este documento.
 - El runner de migraciones no se ejecutó ni se considera seguro: falta reparar tracking, parser/ejecución transaccional y conjunto de archivos antes de validar en una base desechable.
+
+### Actualización de consistencia y evidencia
+
+- Se corrigieron las tareas de pruebas MVP que pedían tablas antiguas, datos ficticios o transferencias habilitadas. El Kanban ahora separa lo probado de lo implementado que aún requiere revisión y de lo pendiente.
+- Los registros sprint-3 dejaron de mostrar como completadas metas no demostradas (firma de auditoría, limitador compartido, ejecución horaria y rendimiento objetivo). Se documentaron los endpoints operativos actuales en `docs/TESTING_SPRINT3.md`.
+- Las tareas guardadas en navegador reciben los nuevos títulos y criterios sin borrar notas ni estados personales; los estados de evidencia definidos por el tablero se mantienen.
+- El CI guarda `playwright-report/` y `test-results/` por 14 días después de la ejecución de Playwright.
+- Verificación de esta revisión: `npm run check`, `npm run build` y `npm run test:api` aprobaron; 23 pruebas en 3 archivos. `agent-browser` abrió el Kanban y confirmó sus estados a 346 × 459.
+- Playwright sigue sin confirmación local: el navegador se descargó, pero falta `libnspr4.so`; instalar dependencias del sistema falló porque este sandbox no incluye `apt-get`. El CI ya tiene el paso `playwright install --with-deps chromium`; falta una ejecución verde de CI.
+- El runner de migraciones continúa pendiente; no se ejecutó ni se modificó SQL.

@@ -100,10 +100,10 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [x] `npm run build` aprobado.
 - [x] `npm run test:api`: 21/21 tests aprobados; incluye autorización admin para crédito y controles de acceso cruzado.
 - [~] El último snapshot de cobertura corresponde a 17 tests (60.14% statements, 41.19% branches, 59.21% functions, 62.43% lines); no se recalculó con los 21 tests actuales.
-- [~] `npm run test:e2e -- tests/e2e/spv-mvp.spec.ts` no pudo iniciar Chromium: falta `chrome-headless-shell` en la caché de Playwright. La verificación actual con `agent-browser` también quedó bloqueada porque el preview no estaba listo.
-- [ ] Ejecutar Playwright en CI con navegador instalado y conservar artefactos/reporte.
-- [ ] Repetir pruebas funcionales del selector/inventario y transferencias deshabilitadas cuando el preview esté disponible.
-- [ ] Añadir tests de contrato para los cuatro paneles operativos.
+- [~] La última ejecución local de `npm run test:e2e -- tests/e2e/spv-mvp.spec.ts` no pudo iniciar Chromium porque faltaba `chrome-headless-shell`; esto no es evidencia de que la prueba pase o falle.
+- [~] `.github/workflows/ci.yml` sí instala Chromium y ejecuta Playwright. Falta comprobar el resultado verde más reciente y conservar su reporte antes de cerrar esta tarea.
+- [ ] Ampliar las pruebas de navegador para cubrir las acciones disponibles y confirmar que las transferencias deshabilitadas sigan sin poder usarse.
+- [ ] Añadir pruebas de contrato para los cuatro paneles operativos; la guía actual de rutas está en `docs/TESTING_SPRINT3.md`.
 
 ### 8. Migraciones y compatibilidad histórica
 
@@ -142,4 +142,18 @@ El sistema podrá considerarse íntegro para release cuando todos los P0 estén 
 
 Última auditoría: 2026-11-25.
 
-Validación de esta revisión: `npm run check`, `npm run build` y `npm run test:api` aprobados; 21/21 tests. Playwright no inició por ausencia del navegador Chromium esperado y la verificación actual con `agent-browser` quedó bloqueada por preview no listo. El índice canónico está en `docs/SYSTEM_INDEX.md`.
+## Términos en lenguaje sencillo
+
+| Término | Significado práctico |
+| --- | --- |
+| Eventos fallidos / Dead Letter | Resumen de entregas que fallaron y que alguien puede filtrar o volver a intentar. No son mensajes “borrados”. |
+| Prueba de carga / Load Test | Enviar muchas solicitudes de prueba para medir tiempos y errores. Puede afectar un servicio; usar solo un entorno aislado. |
+| Conciliación | Comparar los saldos con sus movimientos para encontrar diferencias; no significa corregirlas automáticamente. |
+| Demo / conectado / degradado | Demo usa datos simulados; conectado consulta el servicio real; degradado significa que funciona solo una parte o que un servicio no responde. No usar “live” como sinónimo de “verificado”. |
+| Programa de migraciones | Herramienta que aplica cambios de estructura a la base de datos. Un script antiguo no es seguro solo por existir; debe registrar lo aplicado y detenerse ante errores. |
+| Validación Zod | Reglas que revisan los datos recibidos antes de que el servidor los procese. |
+| Prueba E2E (de extremo a extremo) | Una prueba automatizada que recorre la interfaz como una persona. Una prueba de API no sustituye esta prueba. |
+| Sprint / sprintlog | Sprint es un grupo de trabajo planificado; sprintlog es una lista importada o registrada. El nombre no demuestra que las tareas se hayan realizado. |
+| En revisión | Hay código o documentación, pero falta evidencia de que se cumplan todos los criterios. |
+
+Validación de esta revisión: `npm run check`, `npm run build` y `npm run test:api` aprobaron; la suite reunió 23 pruebas en 3 archivos. Playwright no inició localmente porque falta la biblioteca del sistema `libnspr4.so`; CI instala Chromium con dependencias y conserva el reporte/artefactos, pero se debe confirmar su ejecución más reciente. El índice canónico está en `docs/SYSTEM_INDEX.md`.
