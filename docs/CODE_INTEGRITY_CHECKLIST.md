@@ -37,8 +37,10 @@ Conclusión: antes de este documento no existía un checklist integral que relac
 - [x] Actividades, puntos, historial, operaciones y Kanban tienen una función de producto identificable.
 - [x] El voto del dashboard usa `/api/svp/votes`; el reward se calcula con `point_rules` y se registra en `points_ledger`, sin aceptar puntos indicados por el cliente.
 - [x] El dominio de inventario tiene rutas/ledger propios, separados del propósito de voto y conversión SVP.
+- [x] La vista de inventario consulta catálogo, posesiones y saldo; las compras usan el endpoint transaccional SVP con clave idempotente.
+- [ ] Aplicar `20260320_inventory_liveops_inventory.sql` a la base activa: faltan las tablas `inventory_catalog` y `user_inventory`; requiere aprobación porque la migración crea esquema e inserta semillas.
 - [x] La especificación no atribuye capacidad de compra a votos; cualquier uso comercial requiere un requerimiento separado.
-- [x] La demo vincula explícitamente cada Dominio (Origen) con sus actividades; una actividad no vinculada o no registrada no se puede simular.
+- [x] La demo de simulación solo ofrece el origen de inventario claramente marcado como simulado; una actividad no registrada no se puede simular.
 - [ ] Persistir el catálogo dominio-actividad en backend antes de describirlo como administración productiva.
 - [x] Health API muestra disponibilidad del backend y base de datos.
 - [x] Paneles operativos exponen carga, errores, replay, alertas y conciliación.

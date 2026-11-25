@@ -23,6 +23,7 @@ El dashboard y las integraciones usan el endpoint canónico `POST /api/svp/votes
 | --- | --- | --- |
 | Entrada frontend | `src/App.tsx` | No crear otra raíz de aplicación |
 | Experiencia SVP | `src/SPVSystem.tsx` | Extender por componentes/hook, no duplicar la pantalla |
+| Panel de inventario | `src/components/InventoryPanel.tsx` | Consume `/api/inventory/catalog`, `/api/inventory/me`, `/api/points/balance` y compra por `/api/inventory/purchase`; usa `requestJSON` + SWR |
 | Estado SVP | `src/hooks/useSpv.ts` | No crear otro hook paralelo para votos |
 | Cliente HTTP base | `src/services/httpClient.ts` | Toda llamada nueva debe reutilizar `requestJSON` |
 | Cliente API MVP Neon | `src/services/neonClient.ts` | Lecturas del modelo SPV; los votos pasan por el cliente autenticado `spvApi.ts` |
@@ -60,6 +61,10 @@ El dashboard y las integraciones usan el endpoint canónico `POST /api/svp/votes
 | `cancelTransfer` | Ninguno | `POST /api/points/transfer/:id/cancel`; no se encontró ruta | No implementada; helper silencia fallos |
 
 `neonClient.ts` realiza las lecturas y el CRUD MVP por `/api/spv/*`; el selector de actividad y el dashboard usan filas persistidas y no insertan tarjetas ficticias cuando la API falla. Las acciones de transferencia/crédito están deshabilitadas mientras falte vínculo de identidad y autorización adecuada. El endpoint de crédito exige el custom claim Firebase `admin: true`; los débitos y consultas de balance por `userId` solo aceptan la propia cuenta salvo actor admin. Los endpoints MVP de `spvMvp.routes.ts` todavía carecen de autenticación y esquemas Zod: no tratarlos como listos para producción. El endpoint `GET /api/points/balance/:userId` sigue disponible por compatibilidad; el hook ya no lo usa para el saldo de sesión.
+
+### Inventario y puntos SVP
+
+`InventoryPanel.tsx` consume el catálogo y la colección del usuario desde `/api/inventory/*`, presenta el saldo de sesión y llama `/api/inventory/purchase` con clave de idempotencia. El backend debita `points_ledger`, entrega `user_inventory`, actualiza existencias y registra `cross_system_transactions`/`inventory_ledger_events` dentro de la transacción. En la base activa consultada el saldo responde, pero `/api/inventory/catalog` y `/api/inventory/me` devuelven 500 porque faltan las tablas creadas por `backend/sql/20260320_inventory_liveops_inventory.sql`; el panel muestra el error específico y no simula catálogo. Esta migración incluye semillas de demostración y no se ejecutó en esta revisión. Requiere autorización explícita antes de modificar la base activa. El selector de simulación se restringió al único origen de inventario declarado como simulado; no representa conexión con proveedor externo.
 
 ### Migraciones
 

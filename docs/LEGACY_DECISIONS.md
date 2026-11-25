@@ -86,4 +86,12 @@ Este registro evita eliminar o congelar código fundamental por una inferencia. 
 
 **Decisión:** no se ejecutó ningún runner, no se cambió SQL y no se eliminó ningún archivo. Se mantiene el camino versionado como intención, no como garantía operativa; requiere registro de migraciones, ejecución transaccional apropiada, orden/dependencias correctas, inclusión explícita de versiones faltantes y fallo no-cero ante error.
 
+### 2026-11-25 — Integración de inventario en el panel SVP
+
+- `src/components/InventoryPanel.tsx` ya consulta catálogo, inventario del usuario y saldo mediante rutas existentes; las compras llaman `/api/inventory/purchase` con una clave de idempotencia y refrescan los tres datos tras éxito.
+- Las rutas de compra integran wallet/ledger SVP, stock de catálogo, inventario de usuario y ledger de inventario dentro de una transacción. No se inventó un proveedor externo ni un mercado nuevo.
+- Validación real del preview: `/api/points/balance` responde 200, pero `/api/inventory/catalog` y `/api/inventory/me` responden 500 por ausencia de tablas de inventario. La pantalla presenta el error retornado por el backend en vez de mostrar datos ficticios.
+- La migración `backend/sql/20260320_inventory_liveops_inventory.sql` crea el catálogo/inventario y añade artículos y tasas de demostración. No se aplicó a la base activa; queda pendiente de aprobación explícita y se registra como tarea separada.
+- El selector de simulación solo ofrece `Inventario externo (simulado)`; el antiguo listado estático de panadería/restaurante/peluquería no probaba suscripciones ni contratos existentes y se retiró.
+
 Última revisión: 2026-11-25.

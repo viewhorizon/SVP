@@ -25,9 +25,6 @@ interface SimulationEvent {
 
 const SIMULATION_DOMAIN_LINKS = [
   { id: "inventory", label: "Inventario externo (simulado)", activities: [] },
-  { id: "panaderia", label: "Panadería", activities: ["Panadero", "Vendedor", "Limpieza"] },
-  { id: "restaurante", label: "Restaurante", activities: ["Cocinero", "Mesero", "Limpieza"] },
-  { id: "peluqueria", label: "Peluquería", activities: ["Peluquero", "Recepcionista", "Limpieza"] },
 ] as const;
 
 const normalizeActivityName = (name: string) =>
