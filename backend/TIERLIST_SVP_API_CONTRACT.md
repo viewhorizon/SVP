@@ -1,14 +1,18 @@
 # Contrato API TierList -> SVP
 
-Contrato operativo para integrar plataformas externas (TierList u otras) con SVP sin acceso directo a la base de datos.
+Contrato de transición para integrar plataformas externas (TierList u otras) con SVP sin acceso directo a la base de datos.
+
+## Estado y prioridad
+
+El contrato objetivo es `../docs/SVP_Integration_Guide_v1_EN.md`; el usuario confirmó el 2026-11-27 que sus endpoints y contratos son la especificación a implementar. Este archivo describe rutas/comportamiento actualmente presentes en el backend y no debe sustituirse por el contrato v1. Su fórmula y rutas son diferencias de implementación pendientes, no una alternativa aprobada al objetivo.
 
 ## Principios
 
 - La app externa envia eventos a SVP API.
 - SVP valida, calcula puntos y persiste en su DB.
-- Formula principal SVP: `puntosBase = activityHours * votosTotales`.
-- `score` es opcional y representa una senal de logro (achievement), no la formula principal por defecto.
-- Para eventos sin `score`, la base es `activityHours * votosTotales`; la conversión puede cambiar el resultado mediante `source_app_rates` y reglas de `policy_rules`. `unit` identifica la unidad de entrada; el saldo acreditado queda en puntos SVP.
+- Fórmula que ejecuta hoy este flujo de eventos (no la fórmula objetivo v1): `puntosBase = activityHours * votosTotales`; las tarifas de origen y `policy_rules` pueden cambiar el crédito final. `unit` identifica la unidad de entrada; el saldo acreditado queda en puntos SVP.
+- Fórmula objetivo confirmada por el usuario: `((global_votes + local_votes) / worldwide_similar_activities_count) * registered_user_activity_hours + svp_voting_bonus`. Ejemplo: `((1200 + 1200) / 150) * 3 = 48` puntos antes del bono. La implementación está pendiente; las definiciones abiertas están en el checklist del guide v1.
+- `score` es opcional en el flujo de eventos existente y representa una señal de logro (achievement); no sustituye la fórmula principal objetivo v1.
 - Todas las operaciones de mutacion deben usar idempotencia estricta por `sourceApp + eventId` (y opcionalmente `Idempotency-Key` para retries de cliente).
 - La inmutabilidad recomendada aplica al ledger: movimientos confirmados no se editan ni borran; los errores se corrigen con asientos compensatorios y referencia al movimiento original. Los datos operativos mutables deben mantener auditoría de cambios.
 - La ruta de vinculación de identidad actualmente actualiza `svpUserId` para el mismo par `sourceApp + externalUserId` mediante upsert. Si una identidad no debe reasignarse silenciosamente, este cambio necesita historial/versionado y auditoría explícita.

@@ -536,16 +536,16 @@ Implement the mock first (same interface as the real client) so frontend develop
 
 ---
 
-## Developer-Agent Review Addendum — 2026-11-26
+## Developer-Agent Review Addendum — updated 2026-11-27
 
-This addendum records implementation findings and recommendations. It does not silently redefine the original v1 contract. Until the gaps below are resolved, treat the guide as a target architecture, not as an API reference that client platforms can safely implement against today.
+This addendum records implementation findings, user-confirmed decisions, and remaining questions. The user has confirmed that v1 is the target integration contract, including its endpoint set; the current repository is not yet aligned and must be brought to that target. This addendum does not change the original v1 contract.
 
 ### A. Verified differences from the current repository
 
 | Guide v1 statement | Current implementation observed | Impact |
 |---|---|---|
 | NestJS backend | The current backend uses Express route factories and `express()` application setup. | The framework migration described in v1 is not reflected in this codebase. |
-| Formula `(local_votes + global_votes) × (hours ÷ similar_activities) + bonus` | External event ingestion calculates `activityHours × totalVotes` (or `score` for an achievement signal), then applies configured source rates and policy rules. The canonical `/api/svp/votes` endpoint grants points from `point_rules`. No worldwide-similar-activity divisor or `svp_voting_bonus` is used in those flows. | The guide's economic formula is materially different from the live code and must be explicitly chosen as either target or current behavior. |
+| Formula `((local_votes + global_votes) ÷ similar_activities) × hours + bonus` | External event ingestion currently calculates `activityHours × totalVotes` (or `score` for an achievement signal), then applies configured source rates and policy rules. The canonical `/api/svp/votes` endpoint grants points from `point_rules`. It does not implement the v1 divisor or `svp_voting_bonus`. | The user confirmed v1 is the target. Example: `((1200 + 1200) ÷ 150) × 3 = 48` points before any bonus. The current calculation must be migrated; this is not an open product decision. |
 | Unlimited votes and threshold-triggered `criterion` confirmation | The canonical vote endpoint enforces a configurable daily limit from `point_limits` (fallback 5) and a rate limiter. Its validated request does not implement the guide's two-phase `criterion` field. | Vote limits and anti-abuse behavior contradict the guide. |
 | `/api/v1/activity`, `/api/v1/votes`, balance, spend, valuation and release routes | The repository exposes different contracts, including `/api/events/results`, `/api/v1/events/results`, `/api/svp/votes`, `/api/v1/svp/votes`, `/api/points/*`, and `/api/inventory/*`. The guide's listed paths were not found as implemented routes. | A client built directly against v1 endpoints will not interoperate with the current API. |
 | SVP-issued user JWT and per-platform `x-platform-id` / `x-platform-secret` | User vote routes use the existing `requireAuth` middleware; external event routes rely on the optional shared webhook secret and identity links. The inspected event routes do not validate the guide's platform credential pair or a Bearer JWT. | Identity and M2M authentication contracts are not aligned. |
@@ -566,6 +566,52 @@ The code supports PostgreSQL and an Express backend, so the high-level database 
 4. Interpret gold/Bitcoin as inspiration for scarcity, predictable rules, and verifiability—not as proof that SVP points are money, a marketable asset, or redeemable for external value.
 5. Require production event authentication, HMAC over the original request body and timestamp, replay protection, and contract tests before publishing the M2M integration contract.
 
-### D. Decision required before implementation
+### D. Direction confirmed by the user — 2026-11-27
 
-Choose whether v1 supersedes the current API and economic model, or whether v1 should be revised to document the current Express/API/formula behavior. Until that decision, do not silently migrate the formula, identity provider, rate limits, or asset accounting. Preserve the original guide text above; this addendum is a dated reconciliation record, not a claim that the recommendations are already implemented.
+- v1 is the target integration specification; its endpoint set is authoritative. Contributions added to the API contract must be implemented, not left as documentation-only proposals.
+- Target formula: `((global_votes + local_votes) / worldwide_similar_activities_count) * registered_user_activity_hours + svp_voting_bonus`. The clarified example produces 48 points before bonus: `((1200 + 1200) / 150) * 3`.
+- Global/local example: a global hair-salon activity and a local hair-salon brand are rated; the similar-activity denominator is the relevant hairdresser activity population.
+- Vault is a linked inventory/trading platform. SVP remains the source of truth for points. Points converted to Vault objects remain in SVP but are locked and unavailable for SVP spending/transfers until converted back.
+- Object properties gained/lost through gameplay and market demand can change the object's Vault market price, denominated in points. This is object valuation, not permission to mint or alter SVP points outside the defined conversion/settlement rules.
+
+### E. Decision checklist
+
+#### Confirmed
+
+- [x] Use the v1 endpoint set as the target contract; implement its contracts and accepted contributions.
+- [x] Use the clarified votes/divisor/hours formula above; the supplied example yields 48 points before bonus.
+- [x] Keep global and local voting scopes and distinguish the rated global activity, local brand, and similar-activity category.
+- [x] Keep points in SVP. Vault owns object/gameplay/market behavior; SVP owns point balances and locking.
+- [x] Lock converted points against an object; they cannot be spent or transferred inside SVP while locked; conversion back releases them.
+- [x] Model appreciation/depreciation as changes to Vault objects and their point-denominated market price, not automatic changes to SVP's point supply.
+- [x] Integrate the documented contributions into implementation, not docs alone: append-only ledger corrections via compensating entries; durable idempotency on mutations; authenticated, replay-protected M2M requests; and periodic signed ledger-hash anchors stored independently of the transactional database.
+
+#### Still needs an answer before the affected feature is implemented
+
+**Formula and voting**
+
+- [ ] Define `worldwide_similar_activities_count` precisely: count of active registered people, activity records, or another unit? Confirm that hairdressers are the denominator for the salon example; define category ownership, eligibility, zero handling, minimum, and the as-of timestamp/snapshot.
+- [ ] Confirm whether one user may cast both a local and global vote on the same subject, whether local votes also feed global totals, and the deduplication rule for each scope.
+- [ ] Define how registered-user hours are validated, capped per report/period, corrected, and attributed to an activity/category.
+- [ ] Define `svp_voting_bonus`: eligibility, calculation, caps, and whether it is awarded per vote, period, or activity.
+- [ ] Set rounding/precision and persist the formula version plus input snapshot with every ledger posting so past credits are reproducible.
+- [ ] Confirm the anti-abuse policy that coexists with v1's unlimited votes and its confirmation threshold: threshold value, what counts as a criterion, and what evidence makes a vote eligible. Rate limits alone do not stop Sybil or duplicate voting.
+
+**Vault conversion and trading**
+
+- [ ] Define the immutable 1:1 base precisely: what is the unit (one object, one property unit, or one point), and does the buyer lock the base amount or the full purchase price?
+- [ ] On object-to-points conversion, does SVP release the original locked quantity or the current Vault market price? If the market price has fallen, can the holder still redeem the original lock?
+- [ ] When an upgraded/high-demand object costs more points, specify where the premium goes and whether it is locked, transferred to the seller, or otherwise settled. Define atomic buyer payment, seller proceeds, object ownership transfer, and lock ownership.
+- [ ] Define the accounting when an object's market price differs from its immutable 1:1 base, so trading or redemption cannot silently create, destroy, or double-lock SVP points. The confirmed model is that revaluation changes the Vault object price, not the SVP point supply.
+- [ ] Specify who is authoritative for gameplay properties, demand, market price, and valuation reports (Vault, SVP policy, or another trusted service); define stale/out-of-order update handling and post-melt valuation rejection.
+
+**API, identity, and operations**
+
+- [ ] Define durable idempotency for every mutating v1 endpoint: key scope, replay response, and conflict behavior when the same key is reused with a different payload. `session_id` alone is underspecified for multi-platform use.
+- [ ] Specify the contributed HMAC-SHA256 contract for M2M writes: canonical signed method/path/timestamp/raw-body (and idempotency key), timestamp tolerance, key storage/rotation, and durable replay handling. Keep `x-platform-id` as the key identifier; never transmit a platform secret as a substitute for signature verification. The current event routes allow requests through when their optional shared secret is unset.
+- [ ] Define user consent and authorization boundaries for platform-reported hours, point spending, object release, and user-ID/path matching; specify JWT issuer/audience, key discovery, expiry/revocation, and platform scopes.
+- [ ] Resolve the callback URL in platform onboarding against the pull-based rule that SVP does not push points. If callbacks remain, define event types, signatures, retries, and delivery guarantees.
+- [ ] Confirm the required deployment timing for the guide's NestJS and Redis architecture; the present backend is Express, and the current vote limiter is not evidence of a production Redis-backed distributed limiter.
+- [ ] Set hash-anchor cadence, signing-key custody/rotation, independent storage, retention, and verification procedure for the recommended periodic signed ledger hashes. This is audit hardening, distinct from point accounting correctness.
+
+Until these answers are recorded, implementation can proceed on clearly defined API scaffolding and tests, but must not invent Vault redemption, premium settlement, denominator, bonus, or issuance semantics. Keep the original v1 text intact; this dated addendum records the confirmed direction and open decisions.
