@@ -8,7 +8,16 @@ Contrato operativo para integrar plataformas externas (TierList u otras) con SVP
 - SVP valida, calcula puntos y persiste en su DB.
 - Formula principal SVP: `puntosBase = activityHours * votosTotales`.
 - `score` es opcional y representa una senal de logro (achievement), no la formula principal por defecto.
+- Para eventos sin `score`, la base es `activityHours * votosTotales`; la conversión puede cambiar el resultado mediante `source_app_rates` y reglas de `policy_rules`. `unit` identifica la unidad de entrada; el saldo acreditado queda en puntos SVP.
 - Todas las operaciones de mutacion deben usar idempotencia estricta por `sourceApp + eventId` (y opcionalmente `Idempotency-Key` para retries de cliente).
+- La inmutabilidad recomendada aplica al ledger: movimientos confirmados no se editan ni borran; los errores se corrigen con asientos compensatorios y referencia al movimiento original. Los datos operativos mutables deben mantener auditoría de cambios.
+- La ruta de vinculación de identidad actualmente actualiza `svpUserId` para el mismo par `sourceApp + externalUserId` mediante upsert. Si una identidad no debe reasignarse silenciosamente, este cambio necesita historial/versionado y auditoría explícita.
+
+## Estado de seguridad verificado
+
+- `POST /api/events/validate` y `POST /api/events/results` comprueban `x-webhook-secret` solo si `WEBHOOK_SHARED_SECRET` está configurado. Si falta el secreto, la comprobación actual permite continuar sin él.
+- Estas dos rutas no verifican actualmente `Authorization: Bearer`, `x-webhook-timestamp` ni `x-webhook-signature`. El modo HMAC implementado para `POST /api/webhooks/points/credit` no protege automáticamente los endpoints de eventos.
+- Por tanto, no presentar HMAC ni Bearer como protección efectiva de estos endpoints hasta implementarlos y probarlos. Antes de exponerlos en producción, exigir autenticación o firma y rechazar la petición si no hay secreto configurado.
 
 ## Endpoints
 
