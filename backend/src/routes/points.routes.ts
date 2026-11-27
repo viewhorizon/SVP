@@ -53,47 +53,47 @@ const constantTimeCompare = (a: string, b: string) => {
 
 const normalizeSignature = (value: string) => value.replace(/^sha256=/i, '').trim();
 
-async function resolveLiveOpsRate(client: PoolClient, parkId: string, requestedRateId?: string) {
-  const rawRows = await client.query<{ data: Record<string, unknown> }>(
-    `SELECT to_jsonb(lr) AS data FROM liveops_rates lr LIMIT 200`
+async function resolveLiveOpsRate(
+  client: PoolClient,
+  parkId: string,
+  direction: LiveOpsDirection,
+  requestedRateId?: string
+): Promise<LiveOpsRate | null> {
+  const [unitIn, unitOut] =
+    direction === 'POINTS_TO_LIVEOPS'
+      ? ['SVP_POINTS', 'LIVEOPS_CREDIT']
+      : ['LIVEOPS_CREDIT', 'SVP_POINTS'];
+  const result = await client.query<{
+    rate_id: string;
+    park_id: string | null;
+    rate_value: string;
+    unit_in: string;
+    unit_out: string;
+  }>(
+    `SELECT rate_id, park_id, rate_value, unit_in, unit_out
+     FROM liveops_rates
+     WHERE is_active = TRUE
+       AND valid_from <= NOW()
+       AND (valid_until IS NULL OR valid_until > NOW())
+       AND (park_id IS NULL OR park_id = $1)
+       AND unit_in = $2
+       AND unit_out = $3
+       AND ($4::text IS NULL OR rate_id::text = $4::text)
+     ORDER BY CASE WHEN park_id = $1 THEN 0 ELSE 1 END, valid_from DESC, rate_id
+     LIMIT 1`,
+    [parkId, unitIn, unitOut, requestedRateId ?? null]
   );
 
-  const candidates = rawRows.rows
-    .map((row) => row.data ?? {})
-    .filter((data) => {
-      const activeFlag = data.is_active;
-      if (typeof activeFlag === 'boolean' && !activeFlag) return false;
-
-      const dataParkId = String(data.park_id ?? data.parkId ?? '').trim();
-      if (dataParkId && parkId && dataParkId !== parkId) return false;
-
-      if (requestedRateId) {
-        const dataRateId = String(data.rate_id ?? data.id ?? '').trim();
-        if (dataRateId && dataRateId !== requestedRateId) return false;
-      }
-
-      return true;
-    });
-
-  const selected = candidates[0];
-  if (!selected) {
-    return null;
-  }
-
-  const rateValue =
-    toPositiveNumber(selected.rate_value) ??
-    toPositiveNumber(selected.rate) ??
-    toPositiveNumber(selected.multiplier) ??
-    toPositiveNumber(selected.points_per_unit) ??
-    1;
+  const selected = result.rows[0];
+  if (!selected) return null;
 
   return {
-    rateId: toSafeString(selected.rate_id ?? selected.id) || null,
-    parkId: toSafeString(selected.park_id ?? selected.parkId ?? parkId) || null,
-    value: rateValue,
-    unitIn: toSafeString(selected.unit_in ?? selected.unitIn ?? 'SVP_POINTS') || 'SVP_POINTS',
-    unitOut: toSafeString(selected.unit_out ?? selected.unitOut ?? 'LIVEOPS_CREDIT') || 'LIVEOPS_CREDIT',
-  } as LiveOpsRate;
+    rateId: selected.rate_id,
+    parkId: selected.park_id,
+    value: Number(selected.rate_value),
+    unitIn: selected.unit_in,
+    unitOut: selected.unit_out,
+  };
 }
 
 export function createPointsRouter({ pool }: CreatePointsRouterOptions) {
@@ -416,7 +416,7 @@ export function createPointsRouter({ pool }: CreatePointsRouterOptions) {
 
     try {
       const result = await withTransaction(pool, async (client) => {
-        const rate = await resolveLiveOpsRate(client, parkId, requestedRateId || undefined);
+        const rate = await resolveLiveOpsRate(client, parkId, direction, requestedRateId || undefined);
         if (!rate) {
           throw new Error('No se encontro una tasa activa en liveops_rates para esta conversion');
         }
