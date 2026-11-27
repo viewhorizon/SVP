@@ -4,6 +4,7 @@
  */
 
 import type { PoolClient } from 'pg';
+import { verifyInventoryLedgerIntegrity } from './inventoryLedger';
 
 export type ReconciliationIssue = {
   type: 'balance_mismatch' | 'orphaned_record' | 'missing_entry' | 'hash_mismatch';
@@ -34,29 +35,34 @@ export async function checkUserBalances(
 ): Promise<ReconciliationIssue[]> {
   const issues: ReconciliationIssue[] = [];
 
-  // Verificar saldos de puntos
   const result = await client.query(`
     SELECT
-      u.user_id,
-      u.points_balance as user_balance,
-      COALESCE(SUM(le.amount), 0) as ledger_sum
-    FROM users u
-    LEFT JOIN ledger_entries le ON u.user_id = le.user_id
-    GROUP BY u.user_id, u.points_balance
-    HAVING u.points_balance != COALESCE(SUM(le.amount), 0)
+      wallet.user_id,
+      wallet.available_points AS wallet_balance,
+      latest.balance_after AS ledger_balance
+    FROM points_wallet wallet
+    JOIN LATERAL (
+      SELECT balance_after
+      FROM points_ledger
+      WHERE user_id = wallet.user_id
+      ORDER BY created_at DESC, ledger_id DESC
+      LIMIT 1
+    ) latest ON TRUE
+    WHERE wallet.available_points <> latest.balance_after
+    ORDER BY wallet.user_id
   `);
 
   for (const row of result.rows) {
     issues.push({
       type: 'balance_mismatch',
       severity: 'critical',
-      description: `Usuario ${row.user_id}: saldo en tabla=${row.user_balance}, suma de ledger=${row.ledger_sum}`,
+      description: `Usuario ${row.user_id}: saldo wallet=${row.wallet_balance}, último saldo ledger=${row.ledger_balance}`,
       affectedIds: [row.user_id],
       metadata: {
         userId: row.user_id,
-        userBalance: Number(row.user_balance),
-        ledgerSum: Number(row.ledger_sum),
-        difference: Number(row.user_balance) - Number(row.ledger_sum),
+        walletBalance: Number(row.wallet_balance),
+        ledgerBalance: Number(row.ledger_balance),
+        difference: Number(row.wallet_balance) - Number(row.ledger_balance),
       },
     });
   }
@@ -72,32 +78,19 @@ export async function checkHashChainIntegrity(
 ): Promise<ReconciliationIssue[]> {
   const issues: ReconciliationIssue[] = [];
 
-  // Verificar que cada hash apunte correctamente al anterior
-  const result = await client.query(`
-    SELECT
-      le.ledger_id,
-      le.previous_hash,
-      le.entry_hash,
-      le.created_at,
-      prev_le.entry_hash as expected_previous_hash,
-      prev_le.ledger_id as prev_ledger_id
-    FROM ledger_entries le
-    LEFT JOIN ledger_entries prev_le ON le.previous_hash = prev_le.entry_hash
-    WHERE le.previous_hash IS NOT NULL
-      AND prev_le.entry_hash IS NULL
-    LIMIT 100
-  `);
+  const verification = await verifyInventoryLedgerIntegrity(client, { limit: 10000 });
 
-  for (const row of result.rows) {
+  for (const row of verification.issues) {
     issues.push({
       type: 'hash_mismatch',
       severity: 'critical',
-      description: `Hash chain roto en entrada ${row.ledger_id}: previous_hash=${row.previous_hash} no encontrado`,
-      affectedIds: [row.ledger_id],
+      description: `Cadena de inventario inconsistente en evento ${row.eventId}: ${row.reason}`,
+      affectedIds: [row.eventId],
       metadata: {
-        ledgerId: row.ledger_id,
-        previousHash: row.previous_hash,
-        createdAt: row.created_at,
+        eventId: row.eventId,
+        reason: row.reason,
+        expected: row.expected,
+        actual: row.actual,
       },
     });
   }
@@ -113,32 +106,29 @@ export async function checkCrossSystemTransactions(
 ): Promise<ReconciliationIssue[]> {
   const issues: ReconciliationIssue[] = [];
 
-  // Verificar que todas las transacciones completadas tengan sus asientos contables
   const result = await client.query(`
-    SELECT
-      cst.transaction_id,
-      cst.origin_system,
-      cst.target_system,
-      cst.status,
-      COUNT(le.ledger_id) as ledger_entries
-    FROM cross_system_transactions cst
-    LEFT JOIN ledger_entries le ON cst.transaction_id = le.transaction_id
-    WHERE cst.status = 'completed'
-    GROUP BY cst.transaction_id, cst.origin_system, cst.target_system, cst.status
-    HAVING COUNT(le.ledger_id) < 2  -- Debe haber al menos 2 asientos (origen y destino)
+    SELECT transaction_id, origin_system, target_system, status,
+           amount_in, amount_out, completed_at
+    FROM cross_system_transactions
+    WHERE status = 'completed'
+      AND (amount_in <= 0 OR amount_out <= 0 OR completed_at IS NULL)
+    ORDER BY created_at DESC
+    LIMIT 100
   `);
 
   for (const row of result.rows) {
     issues.push({
       type: 'missing_entry',
       severity: 'critical',
-      description: `Transacción ${row.transaction_id} completada pero con solo ${row.ledger_entries} asientos (esperado 2+)`,
+      description: `Transacción ${row.transaction_id} marcada como completada con importes inválidos o sin completed_at`,
       affectedIds: [row.transaction_id],
       metadata: {
         transactionId: row.transaction_id,
         originSystem: row.origin_system,
         targetSystem: row.target_system,
-        ledgerEntries: Number(row.ledger_entries),
+        amountIn: Number(row.amount_in),
+        amountOut: Number(row.amount_out),
+        completedAt: row.completed_at,
       },
     });
   }
@@ -154,40 +144,43 @@ export async function checkOrphanedRecords(
 ): Promise<ReconciliationIssue[]> {
   const issues: ReconciliationIssue[] = [];
 
-  // Verificar ledger entries sin usuario
-  const orphanedUsers = await client.query(`
-    SELECT COUNT(*) as count
-    FROM ledger_entries le
-    WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = le.user_id)
+  const orphanedLedgerEntries = await client.query(`
+    SELECT ledger.ledger_id, ledger.user_id
+    FROM points_ledger ledger
+    LEFT JOIN points_wallet wallet ON wallet.user_id = ledger.user_id
+    WHERE wallet.user_id IS NULL
+    ORDER BY ledger.created_at DESC
+    LIMIT 100
   `);
 
-  if (orphanedUsers.rows[0].count > 0) {
+  if (orphanedLedgerEntries.rowCount) {
     issues.push({
       type: 'orphaned_record',
       severity: 'warning',
-      description: `${orphanedUsers.rows[0].count} asientos contables referencia usuarios inexistentes`,
-      metadata: {
-        orphanedCount: Number(orphanedUsers.rows[0].count),
-      },
+      description: `${orphanedLedgerEntries.rowCount} entradas points_ledger no tienen wallet asociado`,
+      affectedIds: orphanedLedgerEntries.rows.map((row) => row.ledger_id),
+      metadata: { orphanedCount: orphanedLedgerEntries.rowCount },
     });
   }
 
-  // Verificar transacciones sin ledger entries asociadas
-  const orphanedTransactions = await client.query(`
-    SELECT COUNT(*) as count
-    FROM cross_system_transactions cst
-    WHERE NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.transaction_id = cst.transaction_id)
-      AND cst.status = 'completed'
+  const orphanedInventoryEvents = await client.query(`
+    SELECT event.ledger_event_id, event.entity_id
+    FROM inventory_ledger_events event
+    WHERE event.entity_type = 'item'
+      AND NOT EXISTS (
+        SELECT 1 FROM inventory_catalog item WHERE item.item_id = event.entity_id
+      )
+    ORDER BY event.created_at DESC
+    LIMIT 100
   `);
 
-  if (orphanedTransactions.rows[0].count > 0) {
+  if (orphanedInventoryEvents.rowCount) {
     issues.push({
       type: 'orphaned_record',
       severity: 'warning',
-      description: `${orphanedTransactions.rows[0].count} transacciones completadas sin asientos contables`,
-      metadata: {
-        orphanedCount: Number(orphanedTransactions.rows[0].count),
-      },
+      description: `${orphanedInventoryEvents.rowCount} eventos de inventario apuntan a items inexistentes`,
+      affectedIds: orphanedInventoryEvents.rows.map((row) => row.ledger_event_id),
+      metadata: { orphanedCount: orphanedInventoryEvents.rowCount },
     });
   }
 
@@ -200,13 +193,13 @@ export async function checkOrphanedRecords(
 export async function getLedgerStats(client: PoolClient) {
   const result = await client.query(`
     SELECT
-      COUNT(*) as total_entries,
-      COUNT(DISTINCT user_id) as unique_users,
-      SUM(amount) as total_balance,
-      AVG(amount) as avg_amount,
-      MIN(amount) as min_amount,
-      MAX(amount) as max_amount
-    FROM ledger_entries
+      (SELECT COUNT(*) FROM points_ledger) AS total_entries,
+      COUNT(*) AS unique_users,
+      COALESCE(SUM(available_points), 0) AS total_balance,
+      COALESCE(AVG(available_points), 0) AS avg_amount,
+      COALESCE(MIN(available_points), 0) AS min_amount,
+      COALESCE(MAX(available_points), 0) AS max_amount
+    FROM points_wallet
   `);
 
   const row = result.rows[0];
@@ -214,10 +207,10 @@ export async function getLedgerStats(client: PoolClient) {
   return {
     totalEntries: Number(row.total_entries),
     uniqueUsers: Number(row.unique_users),
-    totalBalance: Number(row.total_balance || 0),
-    avgAmount: Number(row.avg_amount || 0),
-    minAmount: Number(row.min_amount || 0),
-    maxAmount: Number(row.max_amount || 0),
+    totalBalance: Number(row.total_balance),
+    avgAmount: Number(row.avg_amount),
+    minAmount: Number(row.min_amount),
+    maxAmount: Number(row.max_amount),
   };
 }
 

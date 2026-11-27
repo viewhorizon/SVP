@@ -45,10 +45,10 @@ export function validateReplaySignature(
   secret: string
 ): boolean {
   const expected = generateReplaySignature(requestId, secret);
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
+  const supplied = Buffer.from(signature, 'hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+
+  return supplied.length === expectedBuffer.length && crypto.timingSafeEqual(supplied, expectedBuffer);
 }
 
 /**
@@ -209,8 +209,8 @@ export async function getDeadLetterStats(client: PoolClient) {
       COUNT(*) as total,
       COUNT(DISTINCT source_app) as unique_apps,
       COUNT(DISTINCT event_type) as unique_types,
-      MAX(created_at) as oldest_event,
-      MIN(created_at) as newest_event
+      MIN(created_at) as oldest_event,
+      MAX(created_at) as newest_event
     FROM outbox_events
     WHERE status = 'dead_letter'
   `);

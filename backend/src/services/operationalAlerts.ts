@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 export type AlertLevel = 'critical' | 'warning' | 'info';
@@ -32,7 +33,7 @@ export async function checkOutboxBacklogAge(
       EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))/60 as age_minutes
     FROM outbox_events
     WHERE status IN ('pending', 'failed')
-      AND next_attempt_at <= NOW()
+      AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
   `);
 
   const row = result.rows[0];
@@ -44,7 +45,7 @@ export async function checkOutboxBacklogAge(
 
   if (ageMinutes > configMinutes.critical) {
     alerts.push({
-      alertId: `backlog-age-critical-${Date.now()}`,
+      alertId: randomUUID(),
       level: 'critical',
       type: 'outbox_backlog_age',
       title: 'Critical: Outbox backlog envejecido',
@@ -60,7 +61,7 @@ export async function checkOutboxBacklogAge(
     });
   } else if (ageMinutes > configMinutes.warning) {
     alerts.push({
-      alertId: `backlog-age-warning-${Date.now()}`,
+      alertId: randomUUID(),
       level: 'warning',
       type: 'outbox_backlog_age',
       title: 'Warning: Outbox backlog envejecido',
@@ -87,15 +88,36 @@ export async function checkConsecutiveFailures(
   failureThreshold: number = 5
 ) {
   const result = await client.query(`
-    SELECT
-      source_app,
-      COUNT(*) as failure_count,
-      MAX(last_error) as last_error,
-      MAX(created_at) as latest_failure
-    FROM outbox_events
-    WHERE status = 'failed'
-    GROUP BY source_app
-    HAVING COUNT(*) >= $1
+    WITH ranked_events AS (
+      SELECT
+        source_app,
+        status,
+        last_error,
+        created_at,
+        ROW_NUMBER() OVER (PARTITION BY source_app ORDER BY created_at DESC, outbox_id DESC) AS rank
+      FROM outbox_events
+    ),
+    latest_success AS (
+      SELECT source_app, MIN(rank) AS rank
+      FROM ranked_events
+      WHERE status = 'sent'
+      GROUP BY source_app
+    ),
+    failure_streaks AS (
+      SELECT
+        event.source_app,
+        COUNT(*) AS failure_count,
+        (ARRAY_AGG(event.last_error ORDER BY event.rank))[1] AS last_error,
+        MAX(event.created_at) AS latest_failure
+      FROM ranked_events event
+      LEFT JOIN latest_success success USING (source_app)
+      WHERE event.status IN ('failed', 'dead_letter')
+        AND (success.rank IS NULL OR event.rank < success.rank)
+      GROUP BY event.source_app
+    )
+    SELECT source_app, failure_count, last_error, latest_failure
+    FROM failure_streaks
+    WHERE failure_count >= $1
     ORDER BY failure_count DESC
   `, [failureThreshold]);
 
@@ -107,7 +129,7 @@ export async function checkConsecutiveFailures(
     const lastError = row.last_error;
 
     alerts.push({
-      alertId: `consecutive-failures-${sourceApp}-${Date.now()}`,
+      alertId: randomUUID(),
       level: failureCount > 20 ? 'critical' : 'warning',
       type: 'consecutive_failures',
       title: `${failureCount > 20 ? 'Critical' : 'Warning'}: Fallos consecutivos en ${sourceApp}`,
@@ -154,7 +176,7 @@ export async function checkDeadLetterAccumulation(
 
   if (dlqCount > thresholds.critical) {
     alerts.push({
-      alertId: `dlq-critical-${Date.now()}`,
+      alertId: randomUUID(),
       level: 'critical',
       type: 'dead_letter_accumulation',
       title: 'Critical: Dead-letter queue acumulando eventos',
@@ -169,7 +191,7 @@ export async function checkDeadLetterAccumulation(
     });
   } else if (dlqCount > thresholds.warning) {
     alerts.push({
-      alertId: `dlq-warning-${Date.now()}`,
+      alertId: randomUUID(),
       level: 'warning',
       type: 'dead_letter_accumulation',
       title: 'Warning: Dead-letter queue en aumento',
