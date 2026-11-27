@@ -61,8 +61,19 @@ if (fs.existsSync(openApiPath)) {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 }
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'spv-api' });
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, status: 'healthy', service: 'spv-api', database: 'available' });
+  } catch (error) {
+    console.error('[health] database unavailable:', error);
+    res.status(503).json({
+      ok: false,
+      status: 'database_unavailable',
+      service: 'spv-api',
+      database: 'unavailable',
+    });
+  }
 });
 
 const port = Number(process.env.PORT ?? 4000);

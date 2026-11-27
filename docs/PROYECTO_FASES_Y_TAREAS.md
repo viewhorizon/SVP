@@ -1,15 +1,23 @@
 # Proyecto SPV - Fases y Tareas del Ciclo de Desarrollo
-**Generado por GLM para coordinación entre agentes en nuevo chat**
+**Generado por GLM para coordinación entre agentes en nuevo chat**  
+**Actualizado:** 2026-03-29 - Sprint 3 Completado ✅
 
 ---
 
 ## 📋 Estado Actual del Proyecto
 
 **Stack Tecnológico:**
-- Frontend: React + TypeScript + Vite
-- Backend: Node.js + Express
-- Base de Datos: PostgreSQL (fuente de verdad de puntos)
+- Frontend: React 19 + TypeScript + Vite + Tailwind CSS
+- Backend: Node.js + Express + Neon PostgreSQL
+- Base de Datos: PostgreSQL (90+ tablas con schema versionado)
 - Auth: Firebase (middleware requireAuth implementado)
+- Rate Limiting: Upstash Redis + in-memory fallback
+- Monitoring: Alertas operativas, Load testing, Conciliación contable
+
+**Estatus de Migraciones:**
+- ✅ Migraciones Core SQL ejecutadas en Neon
+- ✅ Tabla operational_alerts para Sprint 3
+- ✅ Todas las dependencias resueltas
 
 **Componentes Principales:**
 - `src/App.tsx` - Shell de navegación (SPV | Kanban)
@@ -136,6 +144,29 @@
 | F6-05 | POST /api/ai/planning/analyze (IA backend) | ⏳ | GLM |
 | F6-06 | Integración SPV ↔ Inventario (Firebase) | ⏳ | G5c |
 | F6-07 | Integración Tienda Global ↔ Inventario Global | ⏳ | GLM |
+
+---
+
+### FASE SPRINT 3: OPERACIONES AVANZADAS ✅ COMPLETADA
+
+| ID | Tarea | Estado | Responsable |
+|-----|-------|--------|-------------|
+| sp3-01 | Hash audit endpoint firmado | ✅ | v0 |
+| sp3-02 | Outbox dead-letter replay seguro | ✅ | v0 |
+| sp3-03 | Alertas operativas de dispatcher | ✅ | v0 |
+| sp3-04 | Rate limit distribuido (Redis/Upstash) | ✅ | v0 |
+| sp3-05 | Suite automatizada de carga para votos/eventos | ✅ | v0 |
+| sp3-06 | Panel de conciliacion contable | ✅ | v0 |
+
+**Descripción:** Sprint 3 implementa operaciones avanzadas del sistema SVP incluyendo manejo robusto de fallos, monitoreo operativo, pruebas de carga distribuida y conciliación contable. El sistema está completamente funcional para simulación e integración con aplicaciones externas.
+
+**Entregas:**
+- 5 servicios backend nuevos (deadLetterReplay, operationalAlerts, distributedRateLimit, loadTestSuite, ledgerReconciliation)
+- 4 rutas API nuevas (deadLetter, alerts, loadTest, reconciliation)
+- 4 componentes frontend (DeadLetterPanel, AlertsPanel, LoadTestPanel, ReconciliationPanel)
+- Migraciones SQL para operational_alerts y esquemas relacionados
+- 90+ tablas en Neon completamente funcionales
+- Sistema de prueba funcional en preview de Vercel
 
 ---
 

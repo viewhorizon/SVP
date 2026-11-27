@@ -35,6 +35,8 @@ import { CreateTaskModal } from "./components/kanban/CreateTaskModal";
 import { TaskDetailsModal } from "./components/kanban/TaskDetailsModal";
 import { KanbanTaskTable } from "./components/kanban/KanbanTaskTable";
 import { RoadmapSprintBar } from "./components/kanban/RoadmapSprintBar";
+import { StrategicBacklogPanel } from "./components/kanban/StrategicBacklogPanel";
+import { AnalyzeAIModal } from "./components/kanban/AnalyzeAIModal";
 import type { TraceabilityEntry } from "./components/kanban/TraceabilityPanel";
 
 type RemotePlanningMetrics = {
@@ -121,6 +123,9 @@ export default function KanbanBoard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [timersByRoadmap, setTimersByRoadmap] = useState<TimerByRoadmap>(readTimerByRoadmap);
   const [traceEntries, setTraceEntries] = useState<TraceabilityEntry[]>(safeReadTraceEntries);
+  const [analyzeAIOpen, setAnalyzeAIOpen] = useState(false);
+  const [showStrategicBacklog, setShowStrategicBacklog] = useState(false);
+  const [documentationToAnalyze, setDocumentationToAnalyze] = useState('');
   const importRef = useRef<HTMLInputElement | null>(null);
   const analyzeRef = useRef<HTMLInputElement | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
@@ -228,20 +233,6 @@ export default function KanbanBoard() {
   const exportToJiraCsv = () => downloadFile(buildJiraCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-jira.csv`);
   const exportToAsanaCsv = () => downloadFile(buildAsanaCsv(pageTasks), "text/csv;charset=utf-8;", `kanban-${roadmapPage}-asana.csv`);
   const exportJson = () => downloadFile(JSON.stringify(buildKanbanExportJson(pageTasks), null, 2), "application/json;charset=utf-8;", `kanban-${roadmapPage}.json`);
-
-  const analyzePlan = async () => {
-    const eventId = createTraceId();
-    try {
-      const payload = await requestPlanningAnalysis({ tasks: pageTasks });
-      setRemoteMetrics(payload);
-      setMessage("Analisis actualizado desde /api/ai/planning/analyze.");
-      logUiTrace("Analizar tablero", "ok", `Tareas analizadas: ${pageTasks.length}`, eventId);
-    } catch {
-      setRemoteMetrics(null);
-      setMessage("No fue posible usar el analisis remoto, se muestra analisis local.");
-      logUiTrace("Analizar tablero", "error", "Fallo analisis remoto", eventId);
-    }
-  };
 
   const analyzeDocumentContent = async (document: string) => {
     const eventId = createTraceId();
@@ -459,7 +450,8 @@ export default function KanbanBoard() {
 
     try {
       const content = await file.text();
-      await analyzeDocumentContent(content);
+      setDocumentationToAnalyze(content);
+      setAnalyzeAIOpen(true);
     } catch {
       setMessage("No fue posible leer el archivo para analisis IA.");
     } finally {
@@ -478,12 +470,13 @@ export default function KanbanBoard() {
           onToggleDisplay={() => setBoardDisplay((prev) => (prev === "kanban" ? "table" : "kanban"))}
           onToggleSlideMode={() => setSlideMode((prev) => !prev)}
           onImportFile={() => importRef.current?.click()}
-          onAnalyzeFile={() => analyzeRef.current?.click()}
-          onAnalyzeBoard={() => void analyzePlan()}
-          onExportCsv={exportToTrelloCsv}
+  onAnalyzeFile={() => setAnalyzeAIOpen(true)}
+  onExportCsv={exportToTrelloCsv}
+          onExportJson={exportJson}
           onExportJiraCsv={exportToJiraCsv}
           onExportAsanaCsv={exportToAsanaCsv}
-          onExportJson={exportJson}
+          onToggleStrategicBacklog={() => setShowStrategicBacklog(!showStrategicBacklog)}
+          showStrategicBacklog={showStrategicBacklog}
         />
       </div>
 
@@ -525,6 +518,17 @@ export default function KanbanBoard() {
             </div>
           ) : null}
 
+          {showStrategicBacklog && (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+              <h3 className="mb-4 text-lg font-bold text-slate-900">Backlog Estrategico</h3>
+              <StrategicBacklogPanel 
+                strategicTasks={pageTasks.filter((t) => t.status === 'backlog')}
+                allTasks={pageTasks}
+                onTaskClick={setSelectedTask}
+              />
+            </div>
+          )}
+
           <KanbanFilters
             categories={categories}
             categoryFilter={categoryFilter}
@@ -545,7 +549,7 @@ export default function KanbanBoard() {
             >
               {COLUMNS.filter((column) => isStatusVisible(column.id)).map((column) => {
                 const colTasks = filteredTasks.filter((task) => task.status === column.id);
-                return <KanbanColumn key={column.id} column={column} tasks={colTasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />;
+                return <KanbanColumn key={column.id} column={column} tasks={colTasks} allTasks={tasks} onMoveTask={moveTask} onSelectTask={setSelectedTask} />;
               })}
             </div>
           )}
@@ -575,6 +579,17 @@ export default function KanbanBoard() {
       {message ? <p className="mt-4 text-sm text-slate-600">{message}</p> : null}
       <CreateTaskModal open={createOpen} defaultCategory={categoryFilter === "all" ? "general" : categoryFilter} onClose={() => setCreateOpen(false)} onCreate={addTask} />
       <TaskDetailsModal task={selectedTask} onClose={() => setSelectedTask(null)} />
+      <AnalyzeAIModal 
+        isOpen={analyzeAIOpen}
+        onClose={() => setAnalyzeAIOpen(false)}
+        documentation={documentationToAnalyze}
+        onAnalyze={(provider, result) => {
+          void analyzeDocumentContent(documentationToAnalyze);
+          void result;
+          setMessage(`Análisis completado con ${provider}`);
+          setAnalyzeAIOpen(false);
+        }}
+      />
     </section>
   );
 }

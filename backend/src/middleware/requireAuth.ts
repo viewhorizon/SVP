@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 export type AuthUser = {
   uid: string;
   email?: string;
+  admin?: boolean;
 };
 
 export type AuthenticatedRequest = Request & {
@@ -68,6 +69,7 @@ async function verifyFirebaseToken(token: string): Promise<AuthUser | null> {
   return {
     uid: decoded.uid,
     email: decoded.email,
+    admin: (decoded as typeof decoded & { admin?: unknown }).admin === true,
   };
 }
 
@@ -107,5 +109,12 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     return res.status(401).json({ error: 'Token inválido o no verificado' });
   }
 
+  return next();
+}
+
+export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (req.user?.admin !== true) {
+    return res.status(403).json({ error: 'Se requiere rol de administrador' });
+  }
   return next();
 }

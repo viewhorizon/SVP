@@ -1,0 +1,32 @@
+# SVP — especificación funcional breve
+
+## Propósito
+
+SVP convierte trabajo y actividad monitoreados en puntos. Los votos locales y globales son señales de entrada a la fórmula; no son dinero ni una instrucción para comprar bienes o servicios. No se ha definido una relación entre votos y compras.
+
+## Unidad operativa
+
+El monitoreo ocurre por persona, actividad y local: registrar quién realizó la actividad, cuándo, cuánto tiempo y qué evidencia valida el periodo. Solo el tiempo verificado y la actividad vinculada pueden entrar al cálculo de puntos. Los votos globales y locales alimentan la fórmula de conversión definida por el sistema.
+
+**Flujo previsto:** persona + actividad/local → sesiones y evidencia → validación del tiempo → votos locales/globales como factores → fórmula → puntos → historial. Las transferencias de puntos son aparte; ningún flujo de compra queda implícito.
+
+## Relación Dominio (Origen) → Actividades
+
+El selector de actividad depende del dominio elegido. Ejemplo solicitado: `Panadería → Panadero, Vendedor, Limpieza`. La demo también muestra `Restaurante → Cocinero, Mesero, Limpieza` y `Peluquería → Peluquero, Recepcionista, Limpieza`. Solo aparecen actividades vinculadas y registradas; si falta la actividad backend, no se puede simular ese evento.
+
+Actualmente esas tres relaciones viven en `SIMULATION_DOMAIN_LINKS` de `src/SPVSystem.tsx`; son configuración de demostración, no asociaciones persistidas ni un catálogo editable en producción.
+
+## Implementación existente y brechas
+
+- `POST /api/svp/votes` en `backend/src/routes/svp/votes.routes.ts` es el único endpoint de voto; calcula el otorgamiento con `point_rules`, registra votos/ledger y conserva historial y progreso de tareas vinculadas en una transacción.
+- El endpoint anterior `/api/spv/vote` y el antiguo montaje `/api/votes` fueron retirados; los clientes internos llaman la ruta canónica y los clientes externos deben actualizar su URL.
+- El monitoreo de sesiones/tiempo y su evidencia no está implementado de extremo a extremo.
+- Las rutas de inventario/wallet son independientes. No documentan ni autorizan compras con votos.
+
+## Fallbacks comprobados en código
+
+- `src/services/spvApi.ts` conserva fallbacks en funciones históricas; el hook activo ya no las usa para cargar usuarios/actividades ni para CRUD interno.
+- `src/hooks/useSpv.ts` no crea usuarios/actividades ficticios ante fallos; el voto, saldo y CRUD solo cambian tras confirmación del backend.
+- Las rutas helper antiguas `/api/users` y `/api/activities` siguen sin coincidir con el backend MVP `/api/spv/users` y `/api/spv/activities`. La UI de transferencia/crédito queda deshabilitada hasta resolver el vínculo de identidades y la autorización.
+
+Este documento describe comportamiento comprobado y separa los flujos funcionales previstos de lo que aún falta implementar.

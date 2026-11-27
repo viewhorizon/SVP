@@ -3,8 +3,9 @@ import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { createVotesRouter } from '../src/routes/votes.routes';
+import { createVotesRouter } from '../src/routes/svp/votes.routes';
 import { createPointsRouter } from '../src/routes/points.routes';
+import type { AuthenticatedRequest } from '../src/middleware/requireAuth';
 import { createFakeSpvPool } from './helpers/fakeSpvPool';
 import { clearWebhookReplayGuardForTests } from '../src/services/webhookReplayGuard';
 
@@ -15,9 +16,16 @@ const ACTIVITY_A = '33333333-3333-3333-3333-333333333333';
 function createTestApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    const testAdminToken = /^Bearer test-admin:(.+)$/.exec(req.headers.authorization ?? "");
+    if (testAdminToken) {
+      (req as AuthenticatedRequest).user = { uid: testAdminToken[1], admin: true };
+    }
+    next();
+  });
 
   const fakePool = createFakeSpvPool() as unknown as Pool;
-  app.use('/api', createVotesRouter({ pool: fakePool }));
+  app.use('/api/svp', createVotesRouter({ pool: fakePool }));
   app.use('/api', createPointsRouter({ pool: fakePool }));
 
   return app;
@@ -33,11 +41,36 @@ describe('SPV API integration', () => {
     delete process.env.WEBHOOK_HMAC_TOLERANCE_SECONDS;
   });
 
+  it('requires auth at the canonical vote route and retires the old route', async () => {
+    const app = createTestApp();
+
+    const unauthenticated = await request(app)
+      .post('/api/svp/votes')
+      .send({ activityId: ACTIVITY_A, activityScope: 'local' });
+    const oldRoute = await request(app)
+      .post('/api/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: ACTIVITY_A, activityScope: 'local' });
+
+    expect(unauthenticated.status).toBe(401);
+    expect(oldRoute.status).toBe(404);
+  });
+
+  it('rejects activity IDs that do not match the PostgreSQL UUID contract', async () => {
+    const app = createTestApp();
+    const response = await request(app)
+      .post('/api/svp/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: 'act-demo', activityScope: 'local' });
+
+    expect(response.status).toBe(400);
+  });
+
   it('test-03: vote endpoint updates points balance and daily count', async () => {
     const app = createTestApp();
 
     const voteResponse = await request(app)
-      .post('/api/votes')
+      .post('/api/svp/votes')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
 
@@ -53,7 +86,7 @@ describe('SPV API integration', () => {
     expect(balanceResponse.body.available).toBe(voteResponse.body.pointsGranted);
 
     const countResponse = await request(app)
-      .get('/api/votes/count')
+      .get('/api/svp/votes/count')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .query({ activityId: ACTIVITY_A });
 
@@ -61,11 +94,38 @@ describe('SPV API integration', () => {
     expect(countResponse.body.votesToday).toBe(1);
   });
 
+  it('blocks a sixth daily vote and keeps the count at the configured limit', async () => {
+    const app = createTestApp();
+    const headers = { Authorization: `Bearer dev:${USER_A}` };
+
+    for (let index = 1; index <= 5; index += 1) {
+      const requestId = `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, '0')}`;
+      const response = await request(app)
+        .post('/api/svp/votes')
+        .set(headers)
+        .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId });
+      expect(response.status).toBe(201);
+    }
+
+    const sixthVote = await request(app)
+      .post('/api/svp/votes')
+      .set(headers)
+      .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000006' });
+    const count = await request(app)
+      .get('/api/svp/votes/count')
+      .set(headers);
+
+    expect(sixthVote.status).toBe(429);
+    expect(sixthVote.body.limits.remainingVotes).toBe(0);
+    expect(count.status).toBe(200);
+    expect(count.body.votesToday).toBe(5);
+  });
+
   it('test-04: e2e vote -> transfer -> balances', async () => {
     const app = createTestApp();
 
     const voteResponse = await request(app)
-      .post('/api/votes')
+      .post('/api/svp/votes')
       .set('Authorization', `Bearer dev:${USER_A}`)
       .send({ activityId: ACTIVITY_A, activityScope: 'local', requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
 
@@ -85,7 +145,7 @@ describe('SPV API integration', () => {
 
     const toBalanceResponse = await request(app)
       .get(`/api/points/balance/${USER_B}`)
-      .set('Authorization', `Bearer dev:${USER_A}`);
+      .set('Authorization', `Bearer test-admin:${USER_A}`);
 
     expect(fromBalanceResponse.status).toBe(200);
     expect(toBalanceResponse.status).toBe(200);
@@ -93,18 +153,38 @@ describe('SPV API integration', () => {
     expect(toBalanceResponse.body.available).toBe(2);
   });
 
+  it('requires an admin claim for point credits and blocks cross-user debits', async () => {
+    const app = createTestApp();
+
+    const creditResponse = await request(app)
+      .post('/api/points/credit')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ userId: USER_B, amount: 1 });
+    const debitResponse = await request(app)
+      .post('/api/points/debit')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ userId: USER_B, amount: 1 });
+    const balanceResponse = await request(app)
+      .get(`/api/points/balance/${USER_B}`)
+      .set('Authorization', `Bearer dev:${USER_A}`);
+
+    expect(creditResponse.status).toBe(403);
+    expect(debitResponse.status).toBe(403);
+    expect(balanceResponse.status).toBe(403);
+  });
+
   it('idempotency: same requestId on credit does not duplicate balance changes', async () => {
     const app = createTestApp();
 
     const firstResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .set('Idempotency-Key', 'credit-demo-001')
       .send({ amount: 7 });
 
     const replayResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .set('Idempotency-Key', 'credit-demo-001')
       .send({ amount: 7 });
 
@@ -124,7 +204,7 @@ describe('SPV API integration', () => {
 
     const creditResponse = await request(app)
       .post('/api/points/credit')
-      .set('Authorization', `Bearer dev:${USER_A}`)
+      .set('Authorization', `Bearer test-admin:${USER_A}`)
       .send({ amount: 5, requestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' });
 
     expect(creditResponse.status).toBe(201);
@@ -227,6 +307,35 @@ describe('SPV API integration', () => {
 
     expect(firstResponse.status).toBe(201);
     expect(replayResponse.status).toBe(409);
+  });
+
+  it('scoring: rejects malformed vote and keeps wallet unchanged', async () => {
+    const app = createTestApp();
+
+    const response = await request(app)
+      .post('/api/svp/votes')
+      .set('Authorization', `Bearer dev:${USER_A}`)
+      .send({ activityId: ACTIVITY_A, activityScope: 'invalid-scope' });
+
+    expect(response.status).toBe(400);
+
+    const balance = await request(app)
+      .get('/api/points/balance')
+      .set('Authorization', `Bearer dev:${USER_A}`);
+
+    expect(balance.status).toBe(200);
+    expect(balance.body.available).toBe(0);
+  });
+
+  it('scoring: returns an empty balance for an unknown wallet', async () => {
+    const app = createTestApp();
+
+    const response = await request(app)
+      .get('/api/points/balance/99999999-9999-4999-8999-999999999999')
+      .set('Authorization', `Bearer test-admin:${USER_A}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.available).toBe(0);
   });
 
   it('webhook HMAC: rejects outdated timestamp', async () => {

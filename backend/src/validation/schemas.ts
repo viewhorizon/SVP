@@ -3,8 +3,10 @@ import { z } from 'zod';
 const optionalId = z.string().trim().min(1).optional();
 const positiveAmount = z.coerce.number().finite().positive();
 
+const postgresUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Debe ser un UUID válido');
+
 export const votesCreateSchema = z.object({
-  activityId: z.string().trim().min(1, 'activityId es requerido'),
+  activityId: postgresUuid,
   activityScope: z
     .string()
     .trim()
@@ -17,7 +19,7 @@ export const votesCreateSchema = z.object({
 });
 
 export const votesCountQuerySchema = z.object({
-  activityId: z.string().trim().optional(),
+  activityId: postgresUuid.optional(),
 });
 
 export const userIdParamsSchema = z.object({

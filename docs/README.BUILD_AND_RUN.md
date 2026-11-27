@@ -21,7 +21,7 @@ Variables sugeridas en `.env.example`:
 - `AUTH_MODE=dev` para local rapido (`Bearer dev:<uid>`)
 - `AUTH_MODE=firebase` para verificar JWT con Firebase Admin
 - `VOTES_RATE_LIMIT_WINDOW_MS` y `VOTES_RATE_LIMIT_MAX` para anti abuso
-- `VOTES_CACHE_TTL_SECONDS` para cache de lectura en `GET /api/votes/count` y `GET /api/votes/limits`
+- `VOTES_CACHE_TTL_SECONDS` para cache de lectura en `GET /api/svp/votes/count` y `GET /api/svp/votes/limits`
 - `PLANNING_AI_MODE=local` para analisis local sin proveedor externo
 - `PLANNING_AI_MODE=openai_compatible` para usar proveedor tipo OpenAI
 - Si usas `openai_compatible`: definir `PLANNING_AI_BASE_URL`, `PLANNING_AI_API_KEY`, `PLANNING_AI_MODEL`
@@ -31,7 +31,9 @@ Variables sugeridas en `.env.example`:
 
 Contrato API base disponible en `backend/openapi.yaml`.
 
-SQL recomendado para ambiente local (orden):
+SQL versionado para una base desechable (orden revisado):
+
+No ejecutes estos archivos sobre una base con datos de negocio sin una migración y respaldo revisados. `scripts/run_migrations.js` todavía no es fiable: divide por `;`, continúa tras errores y omite versiones posteriores. Aplica los archivos individualmente y verifica cada resultado en un entorno desechable.
 
 - `backend/sql/20260318_spv_points_core.sql`
 - `backend/sql/20260318_votes_table.sql`
@@ -41,6 +43,8 @@ SQL recomendado para ambiente local (orden):
 - `backend/sql/20260323_outbox_dispatcher.sql`
 - `backend/sql/20260324_inventory_ledger_hash_chain.sql`
 - `backend/sql/20260325_policy_rules.sql`
+- `backend/sql/20260326_operational_alerts.sql`
+- `backend/sql/20260330_spv_mvp_tables.sql`
 - `backend/sql/seed_demo_data.sql`
 
 Swagger UI disponible en `GET /docs` y especificacion cruda en `GET /openapi.yaml`.
@@ -152,12 +156,14 @@ Notas de seguridad webhook:
 - Repetir el mismo `timestamp + signature` dentro de la ventana de tolerancia responde `409` (anti-replay).
 - Para idempotencia de negocio en webhook se prioriza: `requestId` -> `eventId` -> `Idempotency-Key`.
 
-Idempotencia recomendada en operaciones criticas:
+Acreditación manual (solo emisor autorizado):
+
+`POST /api/points/credit` requiere un token Firebase verificado con el custom claim `admin: true`. Los tokens `dev:<uid>` no pueden acreditar puntos. Usa únicamente un token administrativo emitido para el operador autorizado; para eventos externos, usa el webhook HMAC.
 
 ```bash
 curl -X POST http://localhost:4000/api/points/credit \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer dev:11111111-1111-1111-1111-111111111111" \
+  -H "Authorization: Bearer <firebase-id-token-with-admin-claim>" \
   -H "Idempotency-Key: credit-demo-001" \
   -d '{"amount":10}'
 ```

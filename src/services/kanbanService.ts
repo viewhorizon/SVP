@@ -14,6 +14,14 @@ export interface Task {
   status: TaskStatus;
   roadmapPage?: RoadmapPageId | "custom";
   notes?: string;
+  // Sprint 3: Nuevos campos para criterios de aceptacion, dependencias y riesgos
+  acceptanceCriteria?: string[];
+  dependencies?: string[];
+  risks?: string[];
+  // Backlog estrategico: tareas hijo que se despliegan de esta
+  childTaskIds?: string[];
+  parentTaskId?: string;
+  isStrategic?: boolean;
 }
 
 export type TaskLike = Partial<Task> | string;
@@ -57,15 +65,172 @@ export const ROADMAP_WEEKLY_TARGET_HOURS: Record<RoadmapPageId, number> = {
   "sprint-3": 42,
 };
 
-export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string }> = [
-  { id: "backlog", label: "Backlog", color: "from-slate-500 to-slate-600" },
-  { id: "todo", label: "Por Hacer / Pendiente", color: "from-rose-500 to-rose-600" },
+export const COLUMNS: Array<{ id: TaskStatus; label: string; color: string; isStrategic?: boolean }> = [
+  { id: "backlog", label: "Backlog Estrategico", color: "from-slate-500 to-slate-600", isStrategic: true },
+  { id: "todo", label: "Sprint Log", color: "from-rose-500 to-rose-600" },
   { id: "in-progress", label: "En Proceso", color: "from-amber-500 to-amber-600" },
   { id: "review", label: "Revision", color: "from-violet-500 to-violet-600" },
   { id: "done", label: "Completado", color: "from-emerald-500 to-emerald-600" },
 ];
 
 export const DEFAULT_TASKS: Task[] = [
+  // ========== VERIFICACION FUNCIONAL MVP ==========
+  {
+    id: "test-mvp-00",
+    title: "Cerrar verificación funcional del SVP",
+    description: "Plan de pruebas basado en las funciones que existen hoy; no equivale por sí solo a una aprobación para producción.",
+    category: "testing",
+    priority: "high",
+    estimated: "24h",
+    status: "backlog",
+    isStrategic: true,
+    childTaskIds: ["test-mvp-01", "test-mvp-02", "test-mvp-03", "test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07", "test-mvp-08"],
+    acceptanceCriteria: [
+      "Cada tarea se cierra solo con una prueba o evidencia concreta",
+      "Las pruebas de navegador se ejecutan con el navegador de CI instalado",
+      "Los paneles operativos tienen pruebas de sus solicitudes y respuestas",
+      "Las pruebas usan datos aislados y no escriben en producción"
+    ],
+    dependencies: [],
+    risks: ["No hay evidencia guardada de una ejecución E2E verde en CI"]
+  },
+  {
+    id: "test-mvp-01",
+    title: "Confirmar el esquema de datos que usa el sistema",
+    description: "Contrastar tablas y reglas actuales de puntos/votos con las migraciones versionadas; no crear las tablas antiguas spv_transactions/spv_history.",
+    category: "database",
+    priority: "high",
+    estimated: "2h",
+    status: "review",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Identificar las tablas canónicas points_wallet, points_ledger, point_rules, point_limits y votes",
+      "Confirmar en una base de prueba que las migraciones requeridas están aplicadas",
+      "No confundir historial de eventos con una tabla antigua spv_history"
+    ],
+    dependencies: [],
+    risks: ["La base de datos de cada entorno puede tener migraciones distintas"]
+  },
+  {
+    id: "test-mvp-02",
+    title: "Mantener datos de prueba aislados",
+    description: "Usar fixtures y respuestas simuladas solo en pruebas; no insertar usuarios o saldos inventados en la base real.",
+    category: "testing",
+    priority: "medium",
+    estimated: "1h",
+    status: "done",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Las pruebas automatizadas preparan sus propios datos o interceptan la API",
+      "Ningún seed de demostración se presenta como dato real de un usuario"
+    ],
+    dependencies: [],
+    risks: []
+  },
+  {
+    id: "test-mvp-03",
+    title: "Mantener pruebas de API para votos y puntos",
+    description: "Comprobar acceso, límites de voto, saldo, idempotencia y que una cuenta no pueda operar sobre otra.",
+    category: "testing",
+    priority: "high",
+    estimated: "4h",
+    status: "done",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "La suite de API cubre autorización y validación de voto",
+      "Se comprueban límite diario, saldo, idempotencia y operaciones concurrentes",
+      "La suite actual se ejecuta en CI junto con el resto de pruebas de API"
+    ],
+    dependencies: ["test-mvp-01"],
+    risks: []
+  },
+  {
+    id: "test-mvp-04",
+    title: "Probar creación y voto desde la pantalla Actividades",
+    description: "Agregar pruebas de navegador para las acciones disponibles; distinguir errores del servidor de una lista vacía.",
+    category: "testing",
+    priority: "high",
+    estimated: "3h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "La prueba verifica el resultado visible después de crear o votar",
+      "La pantalla comunica claramente los fallos de guardado",
+      "Los datos se preparan con respuestas de prueba y no con cuentas reales"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: []
+  },
+  {
+    id: "test-mvp-05",
+    title: "Conservar transferencias y créditos deshabilitados",
+    description: "Las acciones de transferir y acreditar deben permanecer deshabilitadas hasta resolver la identidad de la billetera y los permisos de emisión.",
+    category: "security",
+    priority: "high",
+    estimated: "1h",
+    status: "done",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Transferir y acreditar aparecen deshabilitados en la interfaz",
+      "La prueba de navegador comprueba que esos botones no se pueden usar",
+      "No se simula una transferencia exitosa"
+    ],
+    dependencies: [],
+    risks: ["Habilitarlas antes de resolver identidad/permisos permitiría errores de saldo"]
+  },
+  {
+    id: "test-mvp-06",
+    title: "Verificar la pantalla Historial ante errores de conexión",
+    description: "Comprobar que el historial carga cuando el backend responde y que muestra un estado entendible si no está disponible.",
+    category: "testing",
+    priority: "medium",
+    estimated: "2h",
+    status: "review",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "La pantalla no se rompe si falla el backend",
+      "Un error de conexión no se presenta como historial vacío confirmado",
+      "La prueba de navegador queda aprobada en CI"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: []
+  },
+  {
+    id: "test-mvp-07",
+    title: "Agregar pruebas a los cuatro paneles de Operaciones",
+    description: "Probar las respuestas del servidor para eventos fallidos, alertas, carga y revisión de saldos; la conexión visual por sí sola no certifica el flujo.",
+    category: "testing",
+    priority: "high",
+    estimated: "4h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "Cada panel tiene al menos una prueba de respuesta correcta y una de error",
+      "El reintento de evento fallido confirma el resultado y evita duplicados",
+      "La prueba de carga solo se ejecuta contra un entorno aislado",
+      "La revisión de saldos muestra discrepancias sin modificar registros"
+    ],
+    dependencies: ["test-mvp-03"],
+    risks: ["Una prueba de carga podría afectar un servicio real si se apunta al entorno equivocado"]
+  },
+  {
+    id: "test-mvp-08",
+    title: "Aprobar el recorrido principal en navegador",
+    description: "Probar con Playwright lo que una persona ve y hace; no confundir una prueba de API llamada E2E con una prueba real de interfaz.",
+    category: "testing",
+    priority: "high",
+    estimated: "3h",
+    status: "todo",
+    parentTaskId: "test-mvp-00",
+    acceptanceCriteria: [
+      "La prueba navega por la interfaz y completa el recorrido de voto",
+      "Comprueba el mensaje de éxito y los datos visibles al recargar",
+      "La ejecución de Playwright termina aprobada en CI y guarda el reporte"
+    ],
+    dependencies: ["test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07"],
+    risks: ["La interfaz usa servicios de prueba; no demuestra por sí sola el estado de Neon productivo"]
+  },
+  // ========== TAREAS EXISTENTES ==========
   { id: "k-01", title: "Alcance definido: SVP + Inventario + Actividades + LiveOps + Unity", description: "Definir el alcance completo del sistema SPV integrado con Inventario y Parque 3D", category: "planning", priority: "high", estimated: "8h", status: "done" },
   { id: "k-02", title: "PostgreSQL confirmado como fuente de verdad", description: "Confirmar y documentar PostgreSQL como base de datos principal para puntos", category: "database", priority: "high", estimated: "4h", status: "done" },
   { id: "k-03", title: "Prototipo UI HTML creado", description: "Crear prototipo HTML inicial del sistema SPV con votes, puntos e inventario", category: "frontend", priority: "high", estimated: "6h", status: "done" },
@@ -77,8 +242,8 @@ export const DEFAULT_TASKS: Task[] = [
   { id: "spv-01", title: "Integrar navegacion SPV | Kanban en pestanas separadas", description: "Crear navegacion principal con iconos para cambiar entre SPV y Kanban", category: "frontend", priority: "high", estimated: "3h", status: "done" },
   { id: "spv-02", title: "Agregar iconos a elementos del SPV (metricas, pestanas, botones)", description: "Integrar iconos lucide-react en toda la interfaz SPV", category: "frontend", priority: "medium", estimated: "4h", status: "done" },
   { id: "spv-03", title: "Manejo de errores, logs y comentarios en SPV", description: "Implementar manejo robusto de errores con panel de logs visible", category: "frontend", priority: "high", estimated: "5h", status: "done" },
-  { id: "spv-04", title: "Conectar SPV a endpoints reales /votes y /points", description: "Reemplazar datos simulados por llamadas a API con fallback local", category: "frontend", priority: "high", estimated: "6h", status: "done" },
-  { id: "spv-05", title: "Anadir panel de Health Check en SPV", description: "Panel que prueba conectividad con /api/votes/count y /api/points/balance", category: "frontend", priority: "medium", estimated: "4h", status: "done" },
+  { id: "spv-04", title: "Conectar SPV a /api/svp/votes y /api/points", description: "Reemplazar datos simulados por llamadas a API con fallback local", category: "frontend", priority: "high", estimated: "6h", status: "done" },
+  { id: "spv-05", title: "Anadir panel de Health Check en SPV", description: "Panel que prueba conectividad con /api/svp/votes/count y /api/points/balance", category: "frontend", priority: "medium", estimated: "4h", status: "done" },
   { id: "kan-01", title: "Tablero Kanban responsive en movil y tablet", description: "Ajustar layout del tablero para diferentes tamanos de pantalla", category: "frontend", priority: "high", estimated: "6h", status: "done" },
   { id: "kan-02", title: "Extraccion de servicios Kanban (kanbanService.ts)", description: "Extraer logica de importacion, exportacion, metricas a modulo reutilizable", category: "refactor", priority: "medium", estimated: "5h", status: "done" },
   { id: "kan-03", title: "Agregar modal para crear tareas con formulario", description: "Implementar modal con campos para crear nuevas tareas en el tablero", category: "frontend", priority: "high", estimated: "4h", status: "done" },
@@ -131,17 +296,121 @@ export const DEFAULT_TASKS: Task[] = [
   { id: "nxt-12", title: "Panel de trazabilidad por requestId y eventId", description: "Vista operativa para soporte y auditoria de transacciones", category: "monitoring", priority: "medium", estimated: "5h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-13", title: "Monitor transaccional base del SVP", description: "Endpoint consolidado para consultar transacciones cross-system con filtros", category: "monitoring", priority: "medium", estimated: "3h", status: "done", roadmapPage: "sprint-2" },
   { id: "nxt-14", title: "Stream en tiempo real para monitor transaccional", description: "Agregar endpoint SSE para snapshots periodicos de transacciones del SVP", category: "monitoring", priority: "medium", estimated: "4h", status: "done", roadmapPage: "sprint-2" },
-  { id: "sp3-01", title: "Hash audit endpoint firmado", description: "Exponer verificacion de integridad con firma de servidor y hashVersion", category: "ledger", priority: "high", estimated: "6h", status: "done", roadmapPage: "sprint-3" },
-  { id: "sp3-02", title: "Outbox dead-letter replay seguro", description: "Herramienta para reintentar eventos DLQ con control de idempotencia", category: "integration", priority: "high", estimated: "7h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-03", title: "Alertas operativas de dispatcher", description: "Disparar alertas por backlog envejecido y fallos consecutivos", category: "ops", priority: "medium", estimated: "5h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-04", title: "Rate limit distribuido", description: "Agregar opcion Redis para rate limiting multi-instancia", category: "security", priority: "medium", estimated: "6h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-05", title: "Suite automatizada de carga para votos/eventos", description: "Escenarios de stress para throughput y latencia", category: "testing", priority: "medium", estimated: "8h", status: "backlog", roadmapPage: "sprint-3" },
-  { id: "sp3-06", title: "Panel de conciliacion contable", description: "Vista para verificar invariantes de ledger y desbalances", category: "monitoring", priority: "high", estimated: "7h", status: "backlog", roadmapPage: "sprint-3" },
+  {
+    id: "sp3-01",
+    title: "Confirmar si hace falta firmar la auditoría del ledger",
+    description: "El endpoint firmado y sus garantías de rendimiento no están demostrados en el código revisado; mantener pendiente hasta decidir e implementar el contrato.",
+    category: "ledger",
+    priority: "medium",
+    estimated: "6h",
+    status: "todo",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Decidir y documentar si se requiere una firma además del hash de integridad existente",
+      "Si se requiere, probar el endpoint, su firma y el comportamiento con datos manipulados",
+      "No declarar una meta de rendimiento sin medición reproducible"
+    ],
+    dependencies: ["nxt-01", "nxt-02"],
+    risks: ["La firma añade complejidad y debe responder a una necesidad real"]
+  },
+  {
+    id: "sp3-02",
+    title: "Probar el reintento seguro de eventos fallidos",
+    description: "La API de reintento existe; falta comprobar en pruebas límites, duplicados, selección y respuesta del panel.",
+    category: "integration",
+    priority: "high",
+    estimated: "7h",
+    status: "review",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "La lista y el reintento usan los endpoints actuales de eventos fallidos",
+      "Un mismo evento no se contabiliza dos veces al reintentarlo",
+      "Se documenta el límite real de reintentos y se prueba"
+    ],
+    dependencies: ["nxt-03", "nxt-04"],
+    risks: ["Reintentar en masa puede saturar el sistema receptor"]
+  },
+  {
+    id: "sp3-03",
+    title: "Probar avisos por problemas del dispatcher",
+    description: "La API calcula avisos de cola atrasada, fallos y eventos fallidos; verificar umbrales y persistencia antes de cerrar.",
+    category: "ops",
+    priority: "medium",
+    estimated: "5h",
+    status: "review",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "La prueba cubre los umbrales configurados realmente por el servidor",
+      "Se verifica qué avisos se guardan y cuáles solo se muestran",
+      "No se afirma notificación por webhook si no está conectada"
+    ],
+    dependencies: ["nxt-04"],
+    risks: ["Umbrales mal calibrados pueden generar avisos innecesarios"]
+  },
+  {
+    id: "sp3-04",
+    title: "Decidir si hace falta limitar solicitudes entre servidores",
+    description: "No hay evidencia de un limitador compartido con Redis/Upstash en la implementación actual; mantener pendiente hasta necesitar varias instancias.",
+    category: "security",
+    priority: "medium",
+    estimated: "6h",
+    status: "todo",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Definir si el despliegue usa más de una instancia y necesita un contador compartido",
+      "Si se implementa, probar límites y comportamiento cuando el servicio de conteo falla",
+      "No mostrar un panel de consumo que no exista"
+    ],
+    dependencies: [],
+    risks: ["Agregar un servicio externo sin necesidad aumenta costo y fallos posibles"]
+  },
+  {
+    id: "sp3-05",
+    title: "Validar con seguridad la herramienta de prueba de carga",
+    description: "Existe una herramienta para enviar solicitudes de prueba; no se ha demostrado el rendimiento objetivo ni una prueba de resistencia.",
+    category: "testing",
+    priority: "medium",
+    estimated: "8h",
+    status: "review",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Probar únicamente contra un entorno de pruebas autorizado",
+      "Registrar cantidad de solicitudes y tiempos de respuesta que la herramienta entrega",
+      "No declarar capacidad de producción sin medición repetible y aislada"
+    ],
+    dependencies: [],
+    risks: ["Una prueba dirigida a producción puede interrumpir el servicio"]
+  },
+  {
+    id: "sp3-06",
+    title: "Comprobar el informe de revisión de saldos y movimientos",
+    description: "La API genera informes y revisiones manuales del ledger; comprobar qué inconsistencias detecta y dejar claro que no se ejecuta cada hora automáticamente.",
+    category: "monitoring",
+    priority: "high",
+    estimated: "7h",
+    status: "review",
+    roadmapPage: "sprint-3",
+    acceptanceCriteria: [
+      "Probar revisión de saldos, cadena de hashes, transacciones y registros huérfanos",
+      "Exportar el informe y comprobar que incluye las discrepancias encontradas",
+      "No indicar ejecución automática por hora: el código expone ejecución bajo demanda"
+    ],
+    dependencies: ["nxt-01", "nxt-02"],
+    risks: ["Corregir datos contables requiere aprobación y no debe hacerse automáticamente"]
+  },
 ];
 
 const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "spv-04": "done",
   "spv-05": "done",
+  // Estados alineados con el alcance vigente; review significa implementado pero pendiente de evidencia.
+  "test-mvp-01": "review",
+  "test-mvp-02": "done",
+  "test-mvp-03": "done",
+  "test-mvp-05": "done",
+  "test-mvp-06": "review",
+  "test-mvp-07": "todo",
+  "test-mvp-08": "todo",
   "kan-03": "done",
   "kan-05": "done",
   "kan-06": "done",
@@ -176,7 +445,12 @@ const TASK_STATUS_OVERRIDES: Partial<Record<string, TaskStatus>> = {
   "nxt-11": "done",
   "nxt-12": "done",
   "nxt-14": "done",
-  "sp3-01": "done",
+  "sp3-01": "todo",
+  "sp3-02": "review",
+  "sp3-03": "review",
+  "sp3-04": "todo",
+  "sp3-05": "review",
+  "sp3-06": "review",
 };
 
 const applyTaskStatusOverrides = (tasks: Task[]): Task[] =>
@@ -249,9 +523,19 @@ export const safeReadTasks = (): Task[] => {
     if (!raw) return applyTaskStatusOverrides(DEFAULT_TASKS);
     const parsed = JSON.parse(raw) as Task[];
     if (Array.isArray(parsed) && parsed.length >= 20) {
-      // Merge by id so newly added sprint tasks appear without losing user edits.
+      // Refresh corrected seed records while preserving their user-managed status and notes.
       const persistedById = new Map(parsed.map((task) => [task.id, task]));
-      const merged = DEFAULT_TASKS.map((seed) => persistedById.get(seed.id) ?? seed);
+      const correctedSeedIds = new Set([
+        "test-mvp-00", "test-mvp-01", "test-mvp-02", "test-mvp-03",
+        "test-mvp-04", "test-mvp-05", "test-mvp-06", "test-mvp-07", "test-mvp-08",
+        "sp3-01", "sp3-02", "sp3-03", "sp3-04", "sp3-05", "sp3-06",
+      ]);
+      const merged = DEFAULT_TASKS.map((seed) => {
+        const persisted = persistedById.get(seed.id);
+        if (!persisted) return seed;
+        if (!correctedSeedIds.has(seed.id)) return persisted;
+        return { ...persisted, ...seed, status: persisted.status, notes: persisted.notes };
+      });
       const custom = parsed.filter((task) => !merged.some((seed) => seed.id === task.id));
       return applyTaskStatusOverrides([...merged, ...custom]);
     }

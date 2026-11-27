@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { castVote, checkApiHealth, creditPoints, getSpvBootstrapState, transferPoints } from "../services/spvApi";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import {
+  castVote,
+  getSpvBootstrapState,
+  type User,
+} from "../services/spvApi";
 import { getLastRequestTelemetry } from "../services/httpClient";
+import * as neonClient from "../services/neonClient";
 
 type ActivityItem = {
   id: string;
@@ -9,22 +14,21 @@ type ActivityItem = {
   pointsPerHour: number;
   votes: number;
   context: string;
+  linkedTaskId?: string | null;
 };
 
 type HistoryEntry = {
   id: string;
   text: string;
   createdAt: string;
+  type?: "vote" | "transfer" | "credit";
+  status?: "success" | "pending" | "error";
+  amount?: number;
 };
 
 const DEMO_USER_ID = "11111111-1111-1111-1111-111111111111";
 const MAX_DAILY_VOTES = 5;
 const MAX_AVAILABLE_POINTS = 100;
-
-const INITIAL_ACTIVITIES: ActivityItem[] = [
-  { id: "act-global-001", name: "Peluquerias", type: "global", pointsPerHour: 1.03, votes: 50234, context: "Actividad global" },
-  { id: "act-local-001", name: "EligeStyle", type: "local", pointsPerHour: 1.44, votes: 14502, context: "Actividad local" },
-];
 
 const buildId = () => crypto.randomUUID();
 const formatDate = () =>
@@ -35,18 +39,31 @@ const formatDate = () =>
     month: "2-digit",
   });
 
+
 export function useSpv() {
-  const [dailyVotesLeft, setDailyVotesLeft] = useState(MAX_DAILY_VOTES);
-  const [pointsAvailable, setPointsAvailable] = useState(42);
-  const [totalPointsAccumulated, setTotalPointsAccumulated] = useState(1240);
-  const [activities, setActivities] = useState(INITIAL_ACTIVITIES);
+  const [dailyVotesLeft, setDailyVotesLeft] = useState(0);
+  const [isVoting, setIsVoting] = useState(false);
+  const voteInFlightRef = useRef(false);
+  const [pointsAvailable, setPointsAvailable] = useState(0);
+  const [totalPointsAccumulated, setTotalPointsAccumulated] = useState(0);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [receiver, setReceiver] = useState("");
-  const [amount, setAmount] = useState(5);
   const [message, setMessage] = useState("");
   const [lastRequestId, setLastRequestId] = useState("");
   const [healthState, setHealthState] = useState<"checking" | "online" | "offline">("checking");
   const [healthLabel, setHealthLabel] = useState("Verificando API...");
+  
+  // Nuevos estados para CRUD completo
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [useNeon, setUseNeon] = useState(false);
+
+  // Trazabilidad: items estrategicos, tareas y notificaciones de impacto
+  const [strategicItems, setStrategicItems] = useState<neonClient.NeonStrategicItem[]>([]);
+  const [tasks, setTasks] = useState<neonClient.NeonTask[]>([]);
+  const [impactNotifications, setImpactNotifications] = useState<
+    (neonClient.VoteImpact & { id: string })[]
+  >([]);
 
   useEffect(() => {
     try {
@@ -58,48 +75,96 @@ export function useSpv() {
     }
   }, []);
 
+  // Cargar datos iniciales desde las fuentes persistidas; si fallan, no sustituirlas con mocks.
   useEffect(() => {
-    setHistory([
-      { id: buildId(), text: "@carlos -> tu (+5 pts)", createdAt: formatDate() },
-      { id: buildId(), text: "Voto global en Peluquerias", createdAt: formatDate() },
-    ]);
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
+    const loadData = async () => {
+      setIsLoading(true);
       try {
-        const bootstrap = await getSpvBootstrapState(DEMO_USER_ID);
+        const [neonUsers, neonActivities, neonHistory, bootstrap, neonStrategic, neonTasks] = await Promise.all([
+          neonClient.fetchUsers(),
+          neonClient.fetchActivities(),
+          neonClient.fetchHistory(),
+          getSpvBootstrapState(),
+          neonClient.fetchStrategicItems(),
+          neonClient.fetchTasks(),
+        ]);
+
+        setUseNeon(true);
         setPointsAvailable(bootstrap.available);
         setTotalPointsAccumulated(bootstrap.historical);
-        setDailyVotesLeft(bootstrap.remainingVotes);
+        setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, bootstrap.remainingVotes)));
+        setRegisteredUsers(neonUsers.map((user) => ({
+          id: user.id,
+          username: user.username,
+          displayName: user.name,
+          pointsBalance: user.points_balance,
+        })));
+        setStrategicItems(neonStrategic);
+        setTasks(neonTasks);
+        setActivities(neonActivities.map((activity) => ({
+          id: activity.id,
+          name: activity.name,
+          type: activity.type,
+          pointsPerHour: activity.points_reward / 10,
+          votes: activity.votes_count,
+          context: activity.description ?? (activity.type === "global" ? "Actividad global" : "Actividad local"),
+          linkedTaskId: activity.linked_task_id ?? null,
+        })));
+
+        setHistory(neonHistory.map((entry) => ({
+          id: entry.id,
+          text: entry.description,
+          createdAt: new Date(entry.created_at).toLocaleString("es-ES", {
+            hour: "2-digit",
+            minute: "2-digit",
+            day: "2-digit",
+            month: "2-digit",
+          }),
+          type: entry.type as "vote" | "transfer" | "credit",
+          status: entry.status as "success" | "pending" | "error",
+          amount: entry.amount,
+        })));
       } catch {
-        // Fallback local.
+        setUseNeon(false);
+        setPointsAvailable(0);
+        setTotalPointsAccumulated(0);
+        setDailyVotesLeft(0);
+        setRegisteredUsers([]);
+        setActivities([]);
+        setStrategicItems([]);
+        setTasks([]);
+        setMessage("No se pudieron cargar los datos persistidos. No se cargaron datos de demostración.");
+      } finally {
+        setIsLoading(false);
       }
     };
-    void load();
+
+    void loadData();
   }, []);
 
-  const runHealthCheck = async () => {
+  const runHealthCheck = useCallback(async () => {
     setHealthState("checking");
-    setHealthLabel("Verificando API...");
+    setHealthLabel("Verificando...");
     try {
-      const health = await checkApiHealth();
-      if (health.ok) {
+      // Intentar conectar al backend (que tiene acceso a Neon)
+      const neonHealth = await neonClient.checkNeonHealth();
+      if (neonHealth.ok) {
         setHealthState("online");
-        setHealthLabel(`API online (${health.service ?? "spv-api"})`);
+        setHealthLabel("Disponible");
+        setUseNeon(true);
         return;
       }
       setHealthState("offline");
-      setHealthLabel("API no disponible");
+      setHealthLabel(neonHealth.status === "database_unavailable" ? "Base de datos no disponible" : "Backend no disponible");
     } catch {
       setHealthState("offline");
-      setHealthLabel("API no disponible");
+      setHealthLabel("Backend no disponible");
     }
-  };
+  }, []);
 
   useEffect(() => {
     void runHealthCheck();
-  }, []);
+  }, [runHealthCheck]);
 
   useEffect(() => {
     const initial = getLastRequestTelemetry();
@@ -115,7 +180,7 @@ export function useSpv() {
     return () => window.removeEventListener("spv:request", listener);
   }, []);
 
-  const todayVotesUsed = MAX_DAILY_VOTES - dailyVotesLeft;
+  const todayVotesUsed = Math.min(MAX_DAILY_VOTES, Math.max(0, MAX_DAILY_VOTES - dailyVotesLeft));
 
   const groupedActivities = useMemo(
     () => ({
@@ -125,72 +190,163 @@ export function useSpv() {
     [activities],
   );
 
-  const addHistory = (text: string) => {
-    setHistory((prev) => [{ id: buildId(), text, createdAt: formatDate() }, ...prev].slice(0, 12));
-  };
+  const addHistory = useCallback((text: string, type: HistoryEntry["type"] = "vote", amount = 0) => {
+    setHistory((prev) => [
+      { id: buildId(), text, createdAt: formatDate(), type, status: "success" as const, amount }, 
+      ...prev
+    ].slice(0, 50));
+  }, []);
 
-  const handleVote = async (activityId: string) => {
+  // Aplicar el impacto de trazabilidad en el estado local (tarea + estrategico)
+  const applyImpact = useCallback((impact: neonClient.VoteImpact) => {
+    // Actualizar la tarea afectada
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === impact.taskId
+          ? { ...t, progress: impact.taskProgress, status: impact.taskStatus }
+          : t,
+      ),
+    );
+    // Actualizar el item estrategico afectado
+    if (impact.strategicId && impact.strategicProgress !== null) {
+      setStrategicItems((prev) =>
+        prev.map((s) =>
+          s.id === impact.strategicId
+            ? { ...s, progress: impact.strategicProgress as number, computed_progress: impact.strategicProgress as number }
+            : s,
+        ),
+      );
+    }
+    // Emitir notificacion de impacto (auto-expira via el componente)
+    const notif = { ...impact, id: buildId() };
+    setImpactNotifications((prev) => [notif, ...prev].slice(0, 4));
+    // Emitir evento global para que el Kanban pueda refrescar
+    window.dispatchEvent(new CustomEvent("spv:impact", { detail: impact }));
+  }, []);
+
+  const dismissImpact = useCallback((id: string) => {
+    setImpactNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  // CREATE - Votar
+  const handleVote = useCallback(async (activityId: string, externalContext?: { domain: string; reference: string }): Promise<boolean> => {
+    if (voteInFlightRef.current) {
+      setMessage("Ya hay un voto en proceso.");
+      return false;
+    }
     if (dailyVotesLeft <= 0) {
       setMessage("No te quedan votos hoy.");
-      return;
+      return false;
     }
     const activity = activities.find((entry) => entry.id === activityId);
-    if (!activity) return;
+    if (!activity) return false;
 
+    voteInFlightRef.current = true;
+    setIsVoting(true);
     try {
-      const result = await castVote(activityId, buildId());
-      setDailyVotesLeft(result.remainingVotes);
-      setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + result.pointsGranted));
-      setTotalPointsAccumulated((prev) => prev + result.pointsGranted);
+      const result = await castVote(activityId, buildId(), activity.type, externalContext);
+      setDailyVotesLeft(Math.max(0, Math.min(MAX_DAILY_VOTES, result.remainingVotes)));
+      setPointsAvailable((prev) => result.availableBalance ?? prev + result.pointsGranted);
+      setTotalPointsAccumulated((prev) => result.historicalBalance ?? prev + result.pointsGranted);
       setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
-      addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`);
-      setMessage("Voto registrado.");
-    } catch {
-      const localPoints = Math.max(1, Math.round(activity.pointsPerHour * 2));
-      setDailyVotesLeft((prev) => prev - 1);
-      setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + localPoints));
-      setTotalPointsAccumulated((prev) => prev + localPoints);
-      setActivities((prev) => prev.map((entry) => (entry.id === activityId ? { ...entry, votes: entry.votes + 1 } : entry)));
-      addHistory(`Voto ${activity.type} en ${activity.name} (+${localPoints} pts)`);
-      setMessage("Voto registrado en modo local.");
+      addHistory(`Voto ${activity.type} en ${activity.name} (+${result.pointsGranted} pts)`, "vote", result.pointsGranted);
+      if (result.impact) {
+        applyImpact(result.impact);
+        setMessage(`Voto registrado. Tarea "${result.impact.taskTitle}" avanzo a ${result.impact.taskProgress}%.`);
+      } else {
+        setMessage("Voto registrado.");
+      }
+      return true;
+    } catch (error) {
+      const apiError = error && typeof error === "object"
+        ? error as { status?: number; payload?: { limits?: { remainingVotes?: unknown } } }
+        : {};
+      if (apiError.status === 429) {
+        const remainingVotes = Number(apiError.payload?.limits?.remainingVotes ?? 0);
+        setDailyVotesLeft(Number.isFinite(remainingVotes)
+          ? Math.max(0, Math.min(MAX_DAILY_VOTES, remainingVotes))
+          : 0);
+        setMessage("Has alcanzado el límite diario de votos. No se registró otro voto.");
+      } else {
+        setMessage("No se pudo registrar el voto. No se actualizaron el contador ni los puntos.");
+      }
+      return false;
+    } finally {
+      voteInFlightRef.current = false;
+      setIsVoting(false);
     }
-  };
+  }, [dailyVotesLeft, activities, addHistory, applyImpact]);
 
-  const handleTransfer = async () => {
-    const user = receiver.trim();
-    if (!user || amount <= 0 || amount > pointsAvailable) {
-      setMessage("Datos de transferencia invalidos.");
+  // CREATE - Nueva actividad
+  const handleCreateActivity = useCallback(async (name: string, type: "global" | "local", context: string) => {
+    const savedActivity = await neonClient.createActivity(name, type, 10, context);
+    if (!savedActivity) {
+      setMessage("No se pudo guardar la actividad. No se añadió al listado.");
       return;
     }
-    try {
-      await transferPoints({ fromUserId: DEMO_USER_ID, toUserId: user, amount, requestId: buildId() });
-    } catch {
-      // Fallback local
-    }
-    setPointsAvailable((prev) => prev - amount);
-    addHistory(`Tu -> ${user} (-${amount} pts)`);
-    setMessage(`Transferencia realizada a ${user}.`);
-  };
 
-  const handleReceive = async () => {
-    const incoming = 8;
-    try {
-      await creditPoints({ userId: DEMO_USER_ID, amount: incoming, reason: "manual_receive_simulation", requestId: buildId() });
-    } catch {
-      // Fallback local
+    setActivities((prev) => [...prev, {
+      id: savedActivity.id,
+      name: savedActivity.name,
+      type: savedActivity.type,
+      pointsPerHour: savedActivity.points_reward / 10,
+      votes: savedActivity.votes_count,
+      context: savedActivity.description ?? context,
+      linkedTaskId: savedActivity.linked_task_id ?? null,
+    }]);
+    setMessage(`Actividad "${savedActivity.name}" guardada.`);
+  }, []);
+
+  // UPDATE - Actualizar actividad
+  const handleUpdateActivity = useCallback(async (id: string, updates: Partial<ActivityItem>) => {
+    const name = updates.name?.trim();
+    if (!name) {
+      setMessage("El nombre de la actividad no puede estar vacío.");
+      return;
     }
-    setPointsAvailable((prev) => Math.min(MAX_AVAILABLE_POINTS, prev + incoming));
-    setTotalPointsAccumulated((prev) => prev + incoming);
-    addHistory(`@laura -> tu (+${incoming} pts)`);
-    setMessage(`Recibiste ${incoming} puntos.`);
-  };
+    const updated = await neonClient.updateActivity(id, name);
+    if (!updated) {
+      setMessage("No se pudo guardar el cambio. La actividad no se modificó.");
+      return;
+    }
+
+    setActivities((prev) => prev.map((activity) => activity.id === id ? { ...activity, name } : activity));
+    setMessage("Actividad actualizada en el backend.");
+  }, []);
+
+  // DELETE - Eliminar actividad
+  const handleDeleteActivity = useCallback(async (id: string) => {
+    const deleted = await neonClient.deleteActivity(id);
+    if (!deleted) {
+      setMessage("No se pudo eliminar la actividad. El listado no se modificó.");
+      return;
+    }
+
+    setActivities((prev) => prev.filter((activity) => activity.id !== id));
+    setMessage("Actividad eliminada del backend.");
+  }, []);
+
+  // UPDATE - Editar entrada de historial
+  const handleUpdateHistoryEntry = useCallback((id: string, newText: string) => {
+    setHistory((prev) => prev.map((entry) => entry.id === id ? { ...entry, text: newText } : entry));
+    setMessage("Entrada actualizada.");
+  }, []);
+
+  // DELETE - Eliminar entrada de historial
+  const handleDeleteHistoryEntry = useCallback((id: string) => {
+    setHistory((prev) => prev.filter((entry) => entry.id !== id));
+    setMessage("Entrada eliminada.");
+  }, []);
+
+  // Limpiar mensaje
+  const clearMessage = useCallback(() => setMessage(""), []);
 
   return {
     constants: { MAX_DAILY_VOTES, MAX_AVAILABLE_POINTS },
     state: {
       activities,
-      amount,
       dailyVotesLeft,
+      isVoting,
       groupedActivities,
       healthLabel,
       healthState,
@@ -198,17 +354,28 @@ export function useSpv() {
       lastRequestId,
       message,
       pointsAvailable,
-      receiver,
       totalPointsAccumulated,
       todayVotesUsed,
+      registeredUsers,
+      isLoading,
+      useNeon,
+      // Trazabilidad
+      strategicItems,
+      tasks,
+      impactNotifications,
     },
     actions: {
-      handleReceive,
-      handleTransfer,
       handleVote,
       runHealthCheck,
-      setAmount,
-      setReceiver,
+      // CRUD completo
+      handleCreateActivity,
+      handleUpdateActivity,
+      handleDeleteActivity,
+      handleUpdateHistoryEntry,
+      handleDeleteHistoryEntry,
+      clearMessage,
+      // Trazabilidad
+      dismissImpact,
     },
   };
 }

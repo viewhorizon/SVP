@@ -4,15 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-all.js",
+    "dev:frontend": "vite",
+    "dev:api": "tsx backend/src/app.ts",
     "build": "vite build",
     "preview": "vite preview",
     "build:prod-no-single": "vite build --config vite.config.prod.ts --mode production",
     "preview:prod": "vite preview --config vite.config.prod.ts",
     "check": "tsc --noEmit",
-    "diagnose": "node scripts/diagnose.js"
+    "diagnose": "node scripts/diagnose.js",
+    "test:api": "vitest run backend/tests src/**/*.test.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "@types/supertest": "^7.2.0",
     "clsx": "2.1.1",
     "express": "^5.2.1",
@@ -24,6 +31,7 @@
     "recharts": "^3.8.1",
     "supertest": "^7.2.2",
     "swagger-ui-express": "^5.0.1",
+    "swr": "^2.5.1",
     "tailwind-merge": "3.4.0",
     "vitest": "^4.1.1",
     "xlsx": "^0.18.5",
@@ -31,12 +39,15 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "4.1.17",
     "@types/node": "^22.0.0",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "tailwindcss": "4.1.17",
+    "tsx": "^4.23.12",
     "typescript": "5.9.3",
     "vite": "7.2.4",
     "vite-plugin-singlefile": "2.3.0"
